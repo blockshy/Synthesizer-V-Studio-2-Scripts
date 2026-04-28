@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 6,
+    versionNumber = 7,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -675,7 +675,7 @@ local flattenPitchDeltaValue = nil
 local clearPitchControlsValue = nil
 local protectOutsideValue = nil
 local introValue = nil
-local panelExpandedValue = nil
+local introExpandedValue = nil
 local runButtonValue = nil
 local refreshButtonValue = nil
 local statusValue = nil
@@ -720,8 +720,8 @@ local function getWidgetValue(widgetValue, fallback)
   return value
 end
 
-local function isPanelExpanded()
-  return getWidgetValue(panelExpandedValue, false) == true
+local function isIntroExpanded()
+  return getWidgetValue(introExpandedValue, false) == true
 end
 
 local function setWidgetValue(widgetValue, value)
@@ -756,11 +756,11 @@ end
 local function getIntroText()
   local zh = "功能: 为选中音符或音符组绘制水平 Studio 2 Pitch Control Curve，"
     .. "并可清理范围内的 pitchDelta 和旧音高控制。\n\n"
-    .. "用法: 选中音符或音符组，选择处理范围和清理选项，展开控制面板后点击“运行”。"
+    .. "用法: 选中音符或音符组，选择处理范围和清理选项，然后点击“运行”。"
   local en = "Purpose: Draw horizontal Studio 2 Pitch Control Curves for selected notes or note groups, "
     .. "with optional pitchDelta and old pitch-control cleanup.\n\n"
     .. "Usage: Select notes or note groups, choose the scope and cleanup options, "
-    .. "then expand controls and click Run."
+    .. "then click Run."
   return tr(zh, en)
 end
 
@@ -946,7 +946,7 @@ local function initializePanel()
   clearPitchControlsValue = createWidgetValue(true)
   protectOutsideValue = createWidgetValue(true)
   introValue = createWidgetValue("")
-  panelExpandedValue = createWidgetValue(false)
+  introExpandedValue = createWidgetValue(false)
   runButtonValue = createWidgetValue(false)
   refreshButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
@@ -966,7 +966,7 @@ local function initializePanel()
     refreshSidePanel()
   end)
 
-  setValueChangeCallback(panelExpandedValue, function()
+  setValueChangeCallback(introExpandedValue, function()
     refreshSidePanel()
   end)
 
@@ -995,9 +995,7 @@ local function appendRows(rows, newRows)
 end
 
 local function buildBaseRows()
-  local expanded = isPanelExpanded()
-
-  return {
+  local rows = {
     {
       type = "Label",
       text = tr("语言 / Language", "Language / 语言"),
@@ -1013,39 +1011,40 @@ local function buildBaseRows()
         },
       },
     },
-    {
-      type = "Label",
-      text = tr("功能与用法", "Purpose & Usage"),
-    },
-    {
-      type = "Container",
-      columns = {
-        {
-          type = "TextArea",
-          value = introValue,
-          height = 128,
-          width = 1.0,
-        },
-      },
-    },
     checkboxRow(
-      expanded and tr("收起控制面板", "Hide controls") or tr("展开控制面板", "Show controls"),
-      panelExpandedValue
+      isIntroExpanded() and tr("隐藏功能与用法", "Hide purpose & usage")
+        or tr("显示功能与用法", "Show purpose & usage"),
+      introExpandedValue
     ),
   }
+
+  if isIntroExpanded() then
+    appendRows(rows, {
+      {
+        type = "Label",
+        text = tr("功能与用法", "Purpose & Usage"),
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "TextArea",
+            value = introValue,
+            height = 128,
+            width = 1.0,
+          },
+        },
+      },
+    })
+  end
+
+  return rows
 end
 
 function getSidePanelSectionState()
   initializePanel()
 
   local rows = buildBaseRows()
-  if not isPanelExpanded() then
-    return {
-      title = tr("音高曲线抹平", "Flatten Pitch Curve"),
-      rows = rows,
-    }
-  end
-
   appendRows(rows, {
     {
       type = "Label",

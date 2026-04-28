@@ -27,7 +27,7 @@ It can process:
 - The script does not change note pitch, lyrics, duration, or position.
 - This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
 - The panel title and UI text can switch between Chinese and English and default to Chinese; the host sidebar script-list name comes from static metadata and cannot follow the in-panel switch in real time.
-- After scripts are rescanned, the panel starts with its controls collapsed and only shows language, purpose/usage, and the `Show controls` switch.
+- The panel shows the full controls by default; the purpose/usage text is hidden by default and can be opened with `Show purpose & usage`.
 - Resetting only `pitchDelta` is not enough to flatten SV2's generated pitch; the default behavior also writes horizontal Pitch Control Curves.
 - By default, the script writes guard points next to the selected range to reduce changes outside the flattened area.
 - When processing note groups, the script modifies the note group target. If the target is reused by multiple references, those references will change as well.

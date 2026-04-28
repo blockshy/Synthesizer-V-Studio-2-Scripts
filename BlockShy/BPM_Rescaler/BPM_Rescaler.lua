@@ -3,7 +3,7 @@ function getClientInfo()
     name = "BPM Rescaler",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 10,
+    versionNumber = 11,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -320,7 +320,7 @@ local processAutomationValue = nil
 local processPitchControlsValue = nil
 local languageValue = nil
 local introValue = nil
-local panelExpandedValue = nil
+local introExpandedValue = nil
 local runButtonValue = nil
 local detectButtonValue = nil
 local statusValue = nil
@@ -377,8 +377,8 @@ local function tr(zh, en)
   return zh
 end
 
-local function isPanelExpanded()
-  return getWidgetValue(panelExpandedValue, false) == true
+local function isIntroExpanded()
+  return getWidgetValue(introExpandedValue, false) == true
 end
 
 local function setWidgetValue(widgetValue, value)
@@ -412,11 +412,11 @@ end
 
 local function getIntroText()
   local zh = "功能: 按“当前 BPM / 原始 BPM”重缩放当前音符组目标内的音符、参数曲线和 Studio 2 音高控制。\n\n"
-    .. "用法: 选中轨道或音符组，检测或填写 BPM，选择锚点和处理项，展开控制面板后点击“运行”。"
+    .. "用法: 选中轨道或音符组，检测或填写 BPM，选择锚点和处理项，然后点击“运行”。"
   local en = "Purpose: Rescale notes, automation, and Studio 2 pitch controls "
     .. "in the current note group target by current BPM / original BPM.\n\n"
     .. "Usage: Select a track or note group, detect or enter BPM values, "
-    .. "choose the anchor and processing options, then expand controls and click Run."
+    .. "choose the anchor and processing options, then click Run."
   return tr(zh, en)
 end
 
@@ -618,7 +618,7 @@ local function initializePanel()
   processPitchControlsValue = createWidgetValue(true)
   languageValue = createWidgetValue(0)
   introValue = createWidgetValue("")
-  panelExpandedValue = createWidgetValue(false)
+  introExpandedValue = createWidgetValue(false)
   runButtonValue = createWidgetValue(false)
   detectButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
@@ -638,7 +638,7 @@ local function initializePanel()
     refreshSidePanel()
   end)
 
-  setValueChangeCallback(panelExpandedValue, function()
+  setValueChangeCallback(introExpandedValue, function()
     refreshSidePanel()
   end)
 
@@ -680,9 +680,7 @@ local function appendRows(rows, newRows)
 end
 
 local function buildBaseRows()
-  local expanded = isPanelExpanded()
-
-  return {
+  local rows = {
     {
       type = "Label",
       text = tr("语言 / Language", "Language / 语言"),
@@ -698,39 +696,40 @@ local function buildBaseRows()
         },
       },
     },
-    {
-      type = "Label",
-      text = tr("功能与用法", "Purpose & Usage"),
-    },
-    {
-      type = "Container",
-      columns = {
-        {
-          type = "TextArea",
-          value = introValue,
-          height = 128,
-          width = 1.0,
-        },
-      },
-    },
     checkboxRow(
-      expanded and tr("收起控制面板", "Hide controls") or tr("展开控制面板", "Show controls"),
-      panelExpandedValue
+      isIntroExpanded() and tr("隐藏功能与用法", "Hide purpose & usage")
+        or tr("显示功能与用法", "Show purpose & usage"),
+      introExpandedValue
     ),
   }
+
+  if isIntroExpanded() then
+    appendRows(rows, {
+      {
+        type = "Label",
+        text = tr("功能与用法", "Purpose & Usage"),
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "TextArea",
+            value = introValue,
+            height = 128,
+            width = 1.0,
+          },
+        },
+      },
+    })
+  end
+
+  return rows
 end
 
 function getSidePanelSectionState()
   initializePanel()
 
   local rows = buildBaseRows()
-  if not isPanelExpanded() then
-    return {
-      title = tr("BPM 重缩放", "BPM Rescaler"),
-      rows = rows,
-    }
-  end
-
   appendRows(rows, {
     {
       type = "Label",

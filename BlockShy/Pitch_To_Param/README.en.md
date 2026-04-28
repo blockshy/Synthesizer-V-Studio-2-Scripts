@@ -42,7 +42,7 @@ A custom parameter name can also be entered to try parameters supported by the c
 - Output values are clamped using the target parameter's official automation range instead of a fixed `-1.0` to `1.0` range.
 - This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
 - The panel title and UI text can switch between Chinese and English and default to Chinese; the host sidebar script-list name comes from static metadata and cannot follow the in-panel switch in real time.
-- After scripts are rescanned, the panel starts with its controls collapsed and only shows language, purpose/usage, and the `Show controls` switch.
+- The panel shows the full controls by default; the purpose/usage text is hidden by default and can be opened with `Show purpose & usage`.
 - The default write mode clears old target points inside selected note ranges, which makes repeated runs more predictable.
 - `Computed pitch` depends on Synthesizer V Studio pitch calculation state. The completion dialog reports any fallback samples.
 - The script writes into the current note group target. If that target is reused by multiple references, those references will change as well.

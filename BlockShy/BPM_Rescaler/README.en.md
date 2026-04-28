@@ -27,7 +27,7 @@ It processes:
 - This script applies one global ratio. It is not a full tempo map conversion tool. It warns when the project contains multiple tempo marks.
 - This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
 - The panel title and UI text can switch between Chinese and English and default to Chinese; the host sidebar script-list name comes from static metadata and cannot follow the in-panel switch in real time.
-- After scripts are rescanned, the panel starts with its controls collapsed and only shows language, purpose/usage, and the `Show controls` switch.
+- The panel shows the full controls by default; the purpose/usage text is hidden by default and can be opened with `Show purpose & usage`.
 - The script edits the current note group target. If that target is reused by multiple references, those references will change as well.
 - Automation points that collapse onto the same blick are merged; later points overwrite earlier ones. The completion dialog reports the collision count.
 - Objects scaled before zero are clamped to 0 blick.
