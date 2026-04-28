@@ -385,7 +385,7 @@ function main()
   }
 
   local result = SV:showCustomDialog(inputForm)
-  if result.status == "Cancel" then
+  if not result or not result.status then
     return
   end
 
