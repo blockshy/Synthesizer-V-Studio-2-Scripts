@@ -9,7 +9,7 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 - Shows each script's purpose, prerequisites, usage, and managed path.
 - Shows the current selected-note, selected-group, and current-group status.
 - Runs the embedded same-version script source through the `Run` button.
-- Generates the manager index from the `BlockShy` directory with `tools/sync_script_manager.lua`.
+- Generates the manager index from the `BlockShy` directory with `tools/sync_script_manager.lua.txt`.
 
 ## Managed Scripts
 
@@ -30,7 +30,7 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 After adding a script folder, run:
 
 ```sh
-lua tools/sync_script_manager.lua
+lua tools/sync_script_manager.lua.txt
 ```
 
 The sync tool scans `BlockShy/*/*.lua`, skips side-panel scripts, reads `getClientInfo()`, `README.zh.md`, and `README.en.md`, then updates the manager's script list and embedded source.
@@ -47,5 +47,5 @@ Managed scripts must:
 - The manager uses a generated registry and does not scan arbitrary directories at Synthesizer V runtime.
 - Managed scripts still keep their original top-menu Scripts entries.
 - Side-panel execution uses embedded script source and does not depend on `loadfile()` or relative script directory paths.
-- If a managed menu script changes behavior, rerun `lua tools/sync_script_manager.lua`.
+- If a managed menu script changes behavior, rerun `lua tools/sync_script_manager.lua.txt`.
 - `SV:finish()` inside loaded menu scripts is ignored in the manager environment so the side-panel script remains active.

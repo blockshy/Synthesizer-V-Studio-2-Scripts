@@ -1,4 +1,4 @@
-local repoRoot = arg[1] or "."
+local repoRoot = (type(arg) == "table" and arg[1]) or "."
 
 local blockshyRoot = repoRoot .. "/BlockShy"
 local managerPath = blockshyRoot .. "/Script_Manager/Script_Manager.lua"
