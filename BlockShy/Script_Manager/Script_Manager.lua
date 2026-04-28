@@ -3165,13 +3165,125 @@ local function registerSelectionCallbacks()
   end
 end
 
-local function createSVProxy()
+local function showManagerMessage(title, message)
+  local shown = safeCall(function()
+    SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+
+  if not shown then
+    safeCall(function()
+      SV:showMessageBox(title, message)
+      return true
+    end)
+  end
+end
+
+local function normalizeProxyArgs(proxy, firstArg, ...)
+  if firstArg == proxy then
+    return ...
+  end
+
+  return firstArg, ...
+end
+
+local function createSVProxy(resumeScript)
   local proxy = {}
 
   setmetatable(proxy, {
     __index = function(_, key)
       if key == "finish" then
         return function() end
+      end
+
+      if key == "showCustomDialog" then
+        return function(firstArg, ...)
+          local form = normalizeProxyArgs(proxy, firstArg, ...)
+          local started = safeCall(function()
+            SV:showCustomDialogAsync(form, function(result)
+              resumeScript(result)
+            end)
+            return true
+          end)
+
+          if not started then
+            error("showCustomDialogAsync is unavailable")
+          end
+
+          return coroutine.yield()
+        end
+      end
+
+      if key == "showInputBox" then
+        return function(firstArg, ...)
+          local title, message, defaultText = normalizeProxyArgs(proxy, firstArg, ...)
+          local started = safeCall(function()
+            SV:showInputBoxAsync(title, message, defaultText, function(result)
+              resumeScript(result)
+            end)
+            return true
+          end)
+
+          if not started then
+            error("showInputBoxAsync is unavailable")
+          end
+
+          return coroutine.yield()
+        end
+      end
+
+      if key == "showMessageBox" then
+        return function(firstArg, ...)
+          local title, message = normalizeProxyArgs(proxy, firstArg, ...)
+          local started = safeCall(function()
+            SV:showMessageBoxAsync(title, message, function()
+              resumeScript()
+            end)
+            return true
+          end)
+
+          if not started then
+            error("showMessageBoxAsync is unavailable")
+          end
+
+          coroutine.yield()
+        end
+      end
+
+      if key == "showOkCancelBox" then
+        return function(firstArg, ...)
+          local title, message = normalizeProxyArgs(proxy, firstArg, ...)
+          local started = safeCall(function()
+            SV:showOkCancelBoxAsync(title, message, function(result)
+              resumeScript(result)
+            end)
+            return true
+          end)
+
+          if not started then
+            error("showOkCancelBoxAsync is unavailable")
+          end
+
+          return coroutine.yield()
+        end
+      end
+
+      if key == "showYesNoCancelBox" then
+        return function(firstArg, ...)
+          local title, message = normalizeProxyArgs(proxy, firstArg, ...)
+          local started = safeCall(function()
+            SV:showYesNoCancelBoxAsync(title, message, function(result)
+              resumeScript(result)
+            end)
+            return true
+          end)
+
+          if not started then
+            error("showYesNoCancelBoxAsync is unavailable")
+          end
+
+          return coroutine.yield()
+        end
       end
 
       local value = SV[key]
@@ -3192,9 +3304,9 @@ local function createSVProxy()
   return proxy
 end
 
-local function createScriptEnvironment()
+local function createScriptEnvironment(resumeScript)
   local env = {
-    SV = createSVProxy(),
+    SV = createSVProxy(resumeScript),
     _VERSION = _VERSION,
     assert = assert,
     collectgarbage = collectgarbage,
@@ -3253,36 +3365,60 @@ local function loadEmbeddedScriptChunk(entry, env)
 end
 
 local function runEntry(entry)
-  local env = createScriptEnvironment()
+  local scriptCoroutine = nil
+
+  local function finishRun()
+    scriptRunQueued = false
+    updateSelectionStatus()
+  end
+
+  local function resumeScript(...)
+    if scriptCoroutine == nil or coroutine.status(scriptCoroutine) == "dead" then
+      return
+    end
+
+    local ok, runtimeError = coroutine.resume(scriptCoroutine, ...)
+    if not ok then
+      showManagerMessage("运行失败", entry.name .. " 执行时出错:\n" .. tostring(runtimeError))
+      finishRun()
+      return
+    end
+
+    if coroutine.status(scriptCoroutine) == "dead" then
+      finishRun()
+    end
+  end
+
+  local env = createScriptEnvironment(resumeScript)
 
   local chunk, loadError = loadEmbeddedScriptChunk(entry, env)
   if chunk == nil then
-    SV:showMessageBox("运行失败", entry.name .. " 加载时出错:\n" .. tostring(loadError))
+    showManagerMessage("运行失败", entry.name .. " 加载时出错:\n" .. tostring(loadError))
+    finishRun()
     return
   end
 
   local ok, runtimeError = pcall(chunk)
   if not ok then
-    SV:showMessageBox("运行失败", entry.name .. " 加载时出错:\n" .. tostring(runtimeError))
+    showManagerMessage("运行失败", entry.name .. " 加载时出错:\n" .. tostring(runtimeError))
+    finishRun()
     return
   end
 
   if type(env.main) ~= "function" then
-    SV:showMessageBox("运行失败", entry.name .. " 没有可调用的 main()。")
+    showManagerMessage("运行失败", entry.name .. " 没有可调用的 main()。")
+    finishRun()
     return
   end
 
-  local runOk, runError = pcall(env.main)
-  if not runOk then
-    SV:showMessageBox("运行失败", entry.name .. " 执行时出错:\n" .. tostring(runError))
-    return
-  end
-
-  updateSelectionStatus()
+  scriptCoroutine = coroutine.create(function()
+    env.main()
+  end)
+  resumeScript()
 end
 
 local function showEntryDetails(entry)
-  SV:showMessageBox("脚本信息", buildScriptInfo(entry))
+  showManagerMessage("脚本信息", buildScriptInfo(entry))
 end
 
 local function initializeValues()
@@ -3310,14 +3446,9 @@ local function initializeValues()
 
     scriptRunQueued = true
     local entry = getSelectedEntry()
-    safeCall(function()
-      runButtonValue:setValue(false)
-      return true
-    end)
 
     local scheduled = safeCall(function()
       SV:setTimeout(0, function()
-        scriptRunQueued = false
         runEntry(entry)
       end)
       return true
