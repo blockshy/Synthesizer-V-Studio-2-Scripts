@@ -2,31 +2,43 @@
 
 ## Purpose
 
-Maps the pitch movement of selected notes into an automation parameter. It can convert melodic pitch or pitch bends into expressive controls such as tension, breathiness, gender, tone shift, or loudness.
+Maps pitch information from selected notes into a target automation parameter. It can convert melody pitch, pitch bends, or Synthesizer V Studio 2 computed pitch into expressive controls such as tension, breathiness, gender, voicing, vibrato envelope, or loudness.
 
-Supported target parameters:
+The target parameter list is built dynamically from the parameters available in the current note group. Built-in candidates include:
 
 - Tension
 - Breathiness
 - Gender
-- Tone Shift
+- Voicing
+- Vibrato Envelope
 - Loudness
+- Tone Shift, as a compatibility attempt
+
+A custom parameter name can also be entered to try parameters supported by the current Synthesizer V Studio version or voice database.
 
 ## Usage
 
 1. Select one or more notes in the piano roll.
 2. Run `Pitch to Parameter`.
-3. Choose the target parameter.
-4. Choose the source mode:
-   - `Full pitch follow`: melody pitch and pitch bends both affect the result.
-   - `Pitch bend only`: ignores the melody pitch and follows only `pitchDelta`.
-5. Choose the point density mode:
-   - `Smart simplify`: keeps meaningful changes while reducing redundant points.
-   - `Force linear`: writes only the start and end point for each note.
-6. Set the center pitch, mapping strength, and direction, then click OK.
+3. Choose a target parameter, or enter a custom parameter name.
+4. Choose the pitch source:
+   - `Lightweight: note pitch + pitchDelta`: fast; includes note pitch, note detune, note group pitch offset, and `pitchDelta`.
+   - `PitchDelta only`: ignores melody pitch and maps only pitch bends.
+   - `Computed pitch`: uses Synthesizer V Studio 2 computed pitch for a closer match to the actual sung pitch. If computed pitch is unavailable, the script warns or falls back per sample.
+5. Choose the point density:
+   - `Smart simplify`: samples by the selected interval, then removes redundant points by linear-error simplification.
+   - `Keep all samples`: writes every sampled point.
+   - `Force linear`: writes only the start and end point of each note.
+6. Choose the write mode:
+   - `Overwrite selected note ranges`: default; removes old target points inside selected note ranges first.
+   - `Append/update only`: keeps old points and only writes new points.
+   - `Clear target parameter and rebuild`: removes all old target points before writing this result.
+7. Set sample interval, simplification threshold, center pitch, strength, and direction, then click OK.
 
 ## Notes
 
-- The script writes points directly into the target automation track and does not automatically clear existing points in the selected region.
-- Parameters other than loudness are clamped to the `-1.0` to `1.0` range.
-- `Tone Shift` availability depends on the Synthesizer V Studio version and voice database support.
+- Output values are clamped using the target parameter's official automation range instead of a fixed `-1.0` to `1.0` range.
+- The default write mode clears old target points inside selected note ranges, which makes repeated runs more predictable.
+- `Computed pitch` depends on Synthesizer V Studio pitch calculation state. The completion dialog reports any fallback samples.
+- The script writes into the current note group target. If that target is reused by multiple references, those references will change as well.
+- `Tone Shift` and custom parameter availability depends on the Synthesizer V Studio version and voice database support.
