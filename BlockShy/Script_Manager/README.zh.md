@@ -15,6 +15,7 @@ Synthesizer V Studio 2 侧边栏脚本管理器，用来集中查看并运行本
 
 - BPM Rescaler
 - Crying Effect
+- Flatten Pitch Curve
 - Pitch to Parameter
 
 ## 使用方法

@@ -15,6 +15,7 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 
 - BPM Rescaler
 - Crying Effect
+- Flatten Pitch Curve
 - Pitch to Parameter
 
 ## Usage
