@@ -3,8 +3,9 @@ function getClientInfo()
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 2,
-    minEditorVersion = 65537,
+    versionNumber = 3,
+    minEditorVersion = 131330,
+    type = "SidePanelSection",
   }
 end
 
@@ -229,28 +230,6 @@ local function getGroupReferenceRange(groupRef, groupTarget)
     start = 0,
     finish = maxEnd,
   }
-end
-
-local function buildScopeChoices(noteCount, groupCount)
-  local choices = {}
-  local values = {}
-
-  if noteCount > 0 then
-    table.insert(choices, "选中音符")
-    table.insert(values, SCOPE_NOTES)
-  end
-
-  if groupCount > 0 then
-    table.insert(choices, "选中音符组")
-    table.insert(values, SCOPE_GROUPS)
-  end
-
-  if noteCount > 0 and groupCount > 0 then
-    table.insert(choices, "选中音符 + 音符组")
-    table.insert(values, SCOPE_BOTH)
-  end
-
-  return choices, values
 end
 
 local function rangeOverlaps(startPos, endPos, range)
@@ -651,84 +630,155 @@ local function buildSummary(operations, pitchStats, removedControlStats, drawnCo
   return summary
 end
 
-function main()
+local scopeValue = nil
+local drawFlatPitchControlsValue = nil
+local flattenPitchDeltaValue = nil
+local clearPitchControlsValue = nil
+local protectOutsideValue = nil
+local runButtonValue = nil
+local refreshButtonValue = nil
+local statusValue = nil
+local initialized = false
+local isRunning = false
+
+local function showMessage(title, message)
+  safeCall(function()
+    SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+end
+
+local function createWidgetValue(defaultValue)
+  local widgetValue = safeCall(function()
+    return SV:create("WidgetValue")
+  end)
+
+  if widgetValue ~= nil then
+    safeCall(function()
+      widgetValue:setValue(defaultValue)
+      return true
+    end)
+  end
+
+  return widgetValue
+end
+
+local function getWidgetValue(widgetValue, fallback)
+  if widgetValue == nil then
+    return fallback
+  end
+
+  local value = safeCall(function()
+    return widgetValue:getValue()
+  end)
+
+  if value == nil then
+    return fallback
+  end
+
+  return value
+end
+
+local function setWidgetValue(widgetValue, value)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValue(value)
+    return true
+  end)
+end
+
+local function setValueChangeCallback(widgetValue, callback)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValueChangeCallback(callback)
+    return true
+  end)
+end
+
+local function getSelectionStatus()
+  local editor = SV:getMainEditor()
+  local selection = editor:getSelection()
+  local selectedNotes = getSortedSelectedNotes(selection)
+  local selectedGroups = getSelectedGroups(editor)
+
+  return "选中音符: " .. #selectedNotes .. " | 选中音符组: " .. #selectedGroups
+end
+
+local function updateStatus()
+  setWidgetValue(statusValue, getSelectionStatus())
+end
+
+local function resolvePanelScope(selectedNotes, _selectedGroups)
+  local choice = getWidgetValue(scopeValue, 0) or 0
+
+  if choice == 1 then
+    return SCOPE_NOTES
+  end
+
+  if choice == 2 then
+    return SCOPE_GROUPS
+  end
+
+  if choice == 3 then
+    return SCOPE_BOTH
+  end
+
+  if #selectedNotes > 0 then
+    return SCOPE_NOTES
+  end
+
+  return SCOPE_GROUPS
+end
+
+local function runPanel()
+  if isRunning then
+    return
+  end
+
+  isRunning = true
+
   local editor = SV:getMainEditor()
   local selection = editor:getSelection()
   local selectedNotes = getSortedSelectedNotes(selection)
   local selectedGroups = getSelectedGroups(editor)
 
   if #selectedNotes == 0 and #selectedGroups == 0 then
-    SV:showMessageBox("提示", "请先在钢琴窗选中音符，或在轨道中选中音符组。")
+    showMessage("提示", "请先在钢琴窗选中音符，或在轨道中选中音符组。")
+    isRunning = false
     return
   end
 
   local currentGroup = editor:getCurrentGroup()
   if #selectedNotes > 0 and currentGroup == nil then
-    SV:showMessageBox("错误", "检测到选中音符，但未检测到当前音符组。")
-    return
-  end
-
-  local scopeChoices, scopeValues = buildScopeChoices(#selectedNotes, #selectedGroups)
-  local inputForm = {
-    title = "音高曲线抹平 V2",
-    message = "为选中音符绘制完全水平的 Studio 2 音高控制曲线，并可清理原有 pitchDelta 和音高控制。",
-    buttons = "OkCancel",
-    widgets = {
-      {
-        name = "scope",
-        type = "ComboBox",
-        label = "处理范围",
-        choices = scopeChoices,
-        default = 0,
-      },
-      {
-        name = "drawFlatPitchControls",
-        type = "CheckBox",
-        text = "绘制水平 Studio 2 Pitch Control Curve",
-        default = true,
-      },
-      {
-        name = "flattenPitchDelta",
-        type = "CheckBox",
-        text = "同时清零 pitchDelta 曲线",
-        default = true,
-      },
-      {
-        name = "clearPitchControls",
-        type = "CheckBox",
-        text = "先移除范围内原有 Studio 2 音高控制点/曲线",
-        default = true,
-      },
-      {
-        name = "protectOutside",
-        type = "CheckBox",
-        text = "保护选区外相邻 pitchDelta 曲线",
-        default = true,
-      },
-    },
-  }
-
-  local result = SV:showCustomDialog(inputForm)
-  if not result or not result.status then
+    showMessage("错误", "检测到选中音符，但未检测到当前音符组。")
+    isRunning = false
     return
   end
 
   local options = {
-    scope = scopeValues[(result.answers.scope or 0) + 1],
-    drawFlatPitchControls = result.answers.drawFlatPitchControls,
-    flattenPitchDelta = result.answers.flattenPitchDelta,
-    clearPitchControls = result.answers.clearPitchControls,
-    protectOutside = result.answers.protectOutside,
+    scope = resolvePanelScope(selectedNotes, selectedGroups),
+    drawFlatPitchControls = getWidgetValue(drawFlatPitchControlsValue, true),
+    flattenPitchDelta = getWidgetValue(flattenPitchDeltaValue, true),
+    clearPitchControls = getWidgetValue(clearPitchControlsValue, true),
+    protectOutside = getWidgetValue(protectOutsideValue, true),
   }
 
   if not options.drawFlatPitchControls and not options.flattenPitchDelta and not options.clearPitchControls then
-    SV:showMessageBox("提示", "没有启用任何处理项。")
+    showMessage("提示", "没有启用任何处理项。")
+    isRunning = false
     return
   end
 
   local operations = buildOperations(options.scope, currentGroup, selectedNotes, selectedGroups)
   if #operations == 0 then
-    SV:showMessageBox("提示", "没有找到可处理的有效范围。")
+    showMessage("提示", "没有找到可处理的有效范围。")
+    isRunning = false
     return
   end
 
@@ -782,6 +832,133 @@ function main()
     end
   end
 
-  SV:showMessageBox("完成", buildSummary(operations, pitchStats, controlStats, drawnControlStats, options))
-  SV:finish()
+  showMessage("完成", buildSummary(operations, pitchStats, controlStats, drawnControlStats, options))
+  updateStatus()
+  isRunning = false
+end
+
+local function initializePanel()
+  if initialized then
+    return
+  end
+
+  initialized = true
+  scopeValue = createWidgetValue(0)
+  drawFlatPitchControlsValue = createWidgetValue(true)
+  flattenPitchDeltaValue = createWidgetValue(true)
+  clearPitchControlsValue = createWidgetValue(true)
+  protectOutsideValue = createWidgetValue(true)
+  runButtonValue = createWidgetValue(false)
+  refreshButtonValue = createWidgetValue(false)
+  statusValue = createWidgetValue("")
+
+  setValueChangeCallback(runButtonValue, function()
+    runPanel()
+  end)
+
+  setValueChangeCallback(refreshButtonValue, function()
+    updateStatus()
+  end)
+
+  updateStatus()
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  return {
+    title = "Flatten Pitch Curve",
+    rows = {
+      {
+        type = "Label",
+        text = "Selection",
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "TextBox",
+            value = statusValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = "Scope",
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = { "自动：优先音符", "选中音符", "选中音符组", "选中音符 + 音符组" },
+            value = scopeValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "CheckBox",
+            text = "绘制水平 Studio 2 Pitch Control Curve",
+            value = drawFlatPitchControlsValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "CheckBox",
+            text = "同时清零 pitchDelta 曲线",
+            value = flattenPitchDeltaValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "CheckBox",
+            text = "先移除范围内原有 Studio 2 音高控制",
+            value = clearPitchControlsValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "CheckBox",
+            text = "保护选区外相邻 pitchDelta 曲线",
+            value = protectOutsideValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "Button",
+            text = "Refresh",
+            value = refreshButtonValue,
+            width = 0.35,
+          },
+          {
+            type = "Button",
+            text = "Run",
+            value = runButtonValue,
+            width = 0.65,
+          },
+        },
+      },
+    },
+  }
 end

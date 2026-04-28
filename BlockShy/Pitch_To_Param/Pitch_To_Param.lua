@@ -3,8 +3,9 @@ function getClientInfo()
     name = "Pitch to Parameter",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 5,
-    minEditorVersion = 65537,
+    versionNumber = 6,
+    minEditorVersion = 131330,
+    type = "SidePanelSection",
   }
 end
 
@@ -81,31 +82,6 @@ local function getParamRange(param)
   end
 
   return -1.0, 1.0, definition
-end
-
-local function getAvailableTargetParams(group)
-  local params = {}
-
-  for _, candidate in ipairs(TARGET_PARAM_CANDIDATES) do
-    local param = getParameterSafe(group, candidate.typeName)
-    if param then
-      table.insert(params, {
-        typeName = candidate.typeName,
-        label = candidate.label,
-      })
-    end
-  end
-
-  return params
-end
-
-local function buildParamLabels(params)
-  local labels = {}
-  for _, param in ipairs(params) do
-    table.insert(labels, param.label)
-  end
-  table.insert(labels, "自定义参数名 (Custom)")
-  return labels
 end
 
 local function getGroupPitchOffset(groupReference)
@@ -417,185 +393,205 @@ local function writeGeneratedPoints(param, points)
   return created, updated
 end
 
-function main()
+local targetParamValue = nil
+local customParamValue = nil
+local sourceModeValue = nil
+local densityModeValue = nil
+local writeModeValue = nil
+local sampleIntervalValue = nil
+local simplifyPercentValue = nil
+local centerPitchValue = nil
+local strengthValue = nil
+local directionValue = nil
+local runButtonValue = nil
+local refreshButtonValue = nil
+local statusValue = nil
+local initialized = false
+local isRunning = false
+
+local function showMessage(title, message)
+  safeCall(function()
+    SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+end
+
+local function createWidgetValue(defaultValue)
+  local widgetValue = safeCall(function()
+    return SV:create("WidgetValue")
+  end)
+
+  if widgetValue ~= nil then
+    safeCall(function()
+      widgetValue:setValue(defaultValue)
+      return true
+    end)
+  end
+
+  return widgetValue
+end
+
+local function getWidgetValue(widgetValue, fallback)
+  if widgetValue == nil then
+    return fallback
+  end
+
+  local value = safeCall(function()
+    return widgetValue:getValue()
+  end)
+
+  if value == nil then
+    return fallback
+  end
+
+  return value
+end
+
+local function setWidgetValue(widgetValue, value)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValue(value)
+    return true
+  end)
+end
+
+local function setValueChangeCallback(widgetValue, callback)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValueChangeCallback(callback)
+    return true
+  end)
+end
+
+local function buildStaticParamLabels()
+  local labels = {}
+  for _, candidate in ipairs(TARGET_PARAM_CANDIDATES) do
+    table.insert(labels, candidate.label)
+  end
+  table.insert(labels, "自定义参数名 (Custom)")
+  return labels
+end
+
+local function getAverageSelectedPitch(notes)
+  if #notes == 0 then
+    return 60
+  end
+
+  local totalPitch = 0
+  for _, note in ipairs(notes) do
+    totalPitch = totalPitch + note:getPitch()
+  end
+
+  return math.floor(totalPitch / #notes)
+end
+
+local function updateStatus()
+  local editor = SV:getMainEditor()
+  local selection = editor:getSelection()
+  local selectedNotes = getSortedSelectedNotes(selection)
+  local centerPitch = getAverageSelectedPitch(selectedNotes)
+
+  if #selectedNotes > 0 then
+    setWidgetValue(centerPitchValue, centerPitch)
+  end
+
+  setWidgetValue(statusValue, "选中音符: " .. #selectedNotes .. " | 建议中心音高: " .. centerPitch)
+end
+
+local function resolveTargetParamName()
+  local customParam = trim(getWidgetValue(customParamValue, ""))
+  if customParam ~= "" then
+    return customParam
+  end
+
+  local targetIndex = getWidgetValue(targetParamValue, 0) or 0
+  if targetIndex == #TARGET_PARAM_CANDIDATES then
+    return nil
+  end
+
+  local candidate = TARGET_PARAM_CANDIDATES[targetIndex + 1]
+  if candidate == nil then
+    return nil
+  end
+
+  return candidate.typeName
+end
+
+local function runPanel()
+  if isRunning then
+    return
+  end
+
+  isRunning = true
+
   local editor = SV:getMainEditor()
   local selection = editor:getSelection()
   local selectedNotes = getSortedSelectedNotes(selection)
 
   if #selectedNotes == 0 then
-    SV:showMessageBox("提示", "请先选中需要处理的音符。")
+    showMessage("提示", "请先选中需要处理的音符。")
+    isRunning = false
     return
   end
 
   local currentGroup = editor:getCurrentGroup()
   if currentGroup == nil then
-    SV:showMessageBox("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    showMessage("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    isRunning = false
     return
   end
 
   local groupTarget = currentGroup:getTarget()
   if groupTarget == nil then
-    SV:showMessageBox("错误", "未检测到当前音符组目标。")
+    showMessage("错误", "未检测到当前音符组目标。")
+    isRunning = false
     return
   end
 
   local pitchDelta = getParameterSafe(groupTarget, "pitchDelta")
   if pitchDelta == nil then
-    SV:showMessageBox("错误", "当前音符组没有可用的 pitchDelta 参数。")
+    showMessage("错误", "当前音符组没有可用的 pitchDelta 参数。")
+    isRunning = false
     return
   end
 
-  local availableParams = getAvailableTargetParams(groupTarget)
-  if #availableParams == 0 then
-    SV:showMessageBox("错误", "当前音符组没有可用的目标参数。")
+  local targetParamName = resolveTargetParamName()
+  if targetParamName == nil then
+    showMessage("错误", "选择自定义参数时必须填写参数名。")
+    isRunning = false
     return
-  end
-
-  local totalPitch = 0
-  for _, note in ipairs(selectedNotes) do
-    totalPitch = totalPitch + note:getPitch()
-  end
-  local avgPitch = math.floor(totalPitch / #selectedNotes)
-
-  local inputForm = {
-    title = "音高映射 V5",
-    message = "将选中音符的音高或弯音映射到目标参数曲线。默认会覆盖选中音符范围内的旧目标参数点。",
-    buttons = "OkCancel",
-    widgets = {
-      {
-        name = "targetParamIdx",
-        type = "ComboBox",
-        label = "目标参数",
-        choices = buildParamLabels(availableParams),
-        default = 0,
-      },
-      {
-        name = "customParam",
-        type = "TextBox",
-        label = "自定义参数名 (可选)",
-        default = "",
-      },
-      {
-        name = "sourceMode",
-        type = "ComboBox",
-        label = "音高来源",
-        choices = {
-          "轻量：音符音高 + pitchDelta",
-          "仅跟随 pitchDelta",
-          "计算后音高 (Studio 2)",
-        },
-        default = 0,
-      },
-      {
-        name = "densityMode",
-        type = "ComboBox",
-        label = "点密度",
-        choices = {
-          "智能精简",
-          "保留全部采样点",
-          "强制线性",
-        },
-        default = 0,
-      },
-      {
-        name = "writeMode",
-        type = "ComboBox",
-        label = "写入模式",
-        choices = {
-          "覆盖选中音符范围",
-          "仅追加/更新同位置点",
-          "清空目标参数后重建",
-        },
-        default = 0,
-      },
-      {
-        name = "sampleInterval",
-        type = "ComboBox",
-        label = "采样间隔",
-        choices = { "1/8 拍", "1/16 拍", "1/32 拍", "1/64 拍" },
-        default = 2,
-      },
-      {
-        name = "simplifyPercent",
-        type = "Slider",
-        label = "精简阈值 (% 参数范围)",
-        format = "%1.2f",
-        minValue = 0.0,
-        maxValue = 5.0,
-        interval = 0.05,
-        default = 0.5,
-      },
-      {
-        name = "centerPitch",
-        type = "Slider",
-        label = "参考中心音高",
-        format = "%1.0f",
-        minValue = 36,
-        maxValue = 96,
-        interval = 1,
-        default = avgPitch,
-      },
-      {
-        name = "strength",
-        type = "Slider",
-        label = "映射强度",
-        format = "%1.2f",
-        minValue = 0.01,
-        maxValue = 2.0,
-        interval = 0.01,
-        default = 0.05,
-      },
-      {
-        name = "direction",
-        type = "ComboBox",
-        label = "方向",
-        choices = { "正向", "反向" },
-        default = 0,
-      },
-    },
-  }
-
-  local result = SV:showCustomDialog(inputForm)
-  if not result or not result.status then
-    return
-  end
-
-  local customParam = trim(result.answers.customParam)
-  local targetParamName
-
-  if customParam ~= "" then
-    targetParamName = customParam
-  elseif result.answers.targetParamIdx == #availableParams then
-    SV:showMessageBox("错误", "选择自定义参数时必须填写参数名。")
-    return
-  else
-    local targetParamOption = availableParams[result.answers.targetParamIdx + 1]
-    targetParamName = targetParamOption.typeName
   end
 
   local targetParam = getParameterSafe(groupTarget, targetParamName)
   if targetParam == nil then
-    SV:showMessageBox("错误", "目标参数不可用: " .. targetParamName)
+    showMessage("错误", "目标参数不可用: " .. targetParamName)
+    isRunning = false
     return
   end
 
   local targetMin, targetMax, targetDefinition = getParamRange(targetParam)
   local targetRange = targetMax - targetMin
-  local sampleDenominator = SAMPLE_DENOMINATORS[result.answers.sampleInterval + 1] or 32
+  local sampleDenominator = SAMPLE_DENOMINATORS[(getWidgetValue(sampleIntervalValue, 2) or 2) + 1] or 32
   local step = math.floor((SV.QUARTER or 705600000) / sampleDenominator)
   if step < 1 then
     step = 1
   end
 
-  local simplifyThreshold = targetRange * ((result.answers.simplifyPercent or 0) / 100.0)
+  local simplifyThreshold = targetRange * ((getWidgetValue(simplifyPercentValue, 0.5) or 0) / 100.0)
   local ranges = collectMergedRanges(selectedNotes)
 
   local context = {
-    sourceMode = result.answers.sourceMode,
-    densityMode = result.answers.densityMode,
-    centerPitch = result.answers.centerPitch,
-    strength = result.answers.strength,
-    isInverted = (result.answers.direction == 1),
+    sourceMode = getWidgetValue(sourceModeValue, 0),
+    densityMode = getWidgetValue(densityModeValue, 0),
+    centerPitch = getWidgetValue(centerPitchValue, getAverageSelectedPitch(selectedNotes)),
+    strength = getWidgetValue(strengthValue, 0.05),
+    isInverted = (getWidgetValue(directionValue, 0) == 1),
     step = step,
     simplifyThreshold = simplifyThreshold,
     targetMin = targetMin,
@@ -608,15 +604,17 @@ function main()
 
   local points, pointStats = buildGeneratedPoints(selectedNotes, context)
   if #points == 0 then
-    SV:showMessageBox("提示", "没有生成任何参数点。")
+    showMessage("提示", "没有生成任何参数点。")
+    isRunning = false
     return
   end
 
   if context.sourceMode == SOURCE_MODE_COMPUTED and pointStats.computedFallbacks == pointStats.sampledPoints then
-    SV:showMessageBox(
+    showMessage(
       "提示",
       "计算后音高尚未准备好，脚本未写入参数。请等待 Synthesizer V 完成音高计算后重试，或改用轻量音高来源。"
     )
+    isRunning = false
     return
   end
 
@@ -626,7 +624,7 @@ function main()
     return true
   end)
 
-  local writeMode = result.answers.writeMode
+  local writeMode = getWidgetValue(writeModeValue, 0)
   local removedPoints = 0
 
   if writeMode == WRITE_REBUILD_TARGET then
@@ -681,6 +679,150 @@ function main()
       .. "\n\n注意: 参数写入当前音符组目标；如果该目标被多个引用复用，其他引用也会同步变化。"
   end
 
-  SV:showMessageBox("完成", summary)
-  SV:finish()
+  showMessage("完成", summary)
+  updateStatus()
+  isRunning = false
+end
+
+local function initializePanel()
+  if initialized then
+    return
+  end
+
+  initialized = true
+  targetParamValue = createWidgetValue(0)
+  customParamValue = createWidgetValue("")
+  sourceModeValue = createWidgetValue(0)
+  densityModeValue = createWidgetValue(0)
+  writeModeValue = createWidgetValue(0)
+  sampleIntervalValue = createWidgetValue(2)
+  simplifyPercentValue = createWidgetValue(0.5)
+  centerPitchValue = createWidgetValue(60)
+  strengthValue = createWidgetValue(0.05)
+  directionValue = createWidgetValue(0)
+  runButtonValue = createWidgetValue(false)
+  refreshButtonValue = createWidgetValue(false)
+  statusValue = createWidgetValue("")
+
+  setValueChangeCallback(runButtonValue, function()
+    runPanel()
+  end)
+
+  setValueChangeCallback(refreshButtonValue, function()
+    updateStatus()
+  end)
+
+  updateStatus()
+end
+
+local function comboRow(choices, value)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "ComboBox",
+        choices = choices,
+        value = value,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+local function sliderRow(label, value, format, minValue, maxValue, interval)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "Slider",
+        label = label,
+        value = value,
+        format = format,
+        minValue = minValue,
+        maxValue = maxValue,
+        interval = interval,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  return {
+    title = "Pitch to Parameter",
+    rows = {
+      {
+        type = "Label",
+        text = "Selection",
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "TextBox",
+            value = statusValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = "Target",
+      },
+      comboRow(buildStaticParamLabels(), targetParamValue),
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "TextBox",
+            value = customParamValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = "Source",
+      },
+      comboRow({
+        "轻量：音符音高 + pitchDelta",
+        "仅跟随 pitchDelta",
+        "计算后音高 (Studio 2)",
+      }, sourceModeValue),
+      comboRow({
+        "智能精简",
+        "保留全部采样点",
+        "强制线性",
+      }, densityModeValue),
+      comboRow({
+        "覆盖选中音符范围",
+        "仅追加/更新同位置点",
+        "清空目标参数后重建",
+      }, writeModeValue),
+      comboRow({ "1/8 拍", "1/16 拍", "1/32 拍", "1/64 拍" }, sampleIntervalValue),
+      sliderRow("精简阈值 (% 参数范围)", simplifyPercentValue, "%1.2f", 0.0, 5.0, 0.05),
+      sliderRow("参考中心音高", centerPitchValue, "%1.0f", 36, 96, 1),
+      sliderRow("映射强度", strengthValue, "%1.2f", 0.01, 2.0, 0.01),
+      comboRow({ "正向", "反向" }, directionValue),
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "Button",
+            text = "Refresh",
+            value = refreshButtonValue,
+            width = 0.35,
+          },
+          {
+            type = "Button",
+            text = "Run",
+            value = runButtonValue,
+            width = 0.65,
+          },
+        },
+      },
+    },
+  }
 end

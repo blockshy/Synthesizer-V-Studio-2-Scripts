@@ -3,8 +3,9 @@ function getClientInfo()
     name = "BPM Rescaler",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 6,
-    minEditorVersion = 65537,
+    versionNumber = 7,
+    minEditorVersion = 131330,
+    type = "SidePanelSection",
   }
 end
 
@@ -312,88 +313,147 @@ local function rescalePitchControls(group, anchor, ratio)
   return stats
 end
 
-function main()
+local currentBpmValue = nil
+local originalBpmValue = nil
+local anchorModeValue = nil
+local processAutomationValue = nil
+local processPitchControlsValue = nil
+local runButtonValue = nil
+local detectButtonValue = nil
+local statusValue = nil
+local initialized = false
+local isRunning = false
+
+local function showMessage(title, message)
+  safeCall(function()
+    SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+end
+
+local function createWidgetValue(defaultValue)
+  local widgetValue = safeCall(function()
+    return SV:create("WidgetValue")
+  end)
+
+  if widgetValue ~= nil then
+    safeCall(function()
+      widgetValue:setValue(defaultValue)
+      return true
+    end)
+  end
+
+  return widgetValue
+end
+
+local function getWidgetValue(widgetValue, fallback)
+  if widgetValue == nil then
+    return fallback
+  end
+
+  local value = safeCall(function()
+    return widgetValue:getValue()
+  end)
+
+  if value == nil then
+    return fallback
+  end
+
+  return value
+end
+
+local function setWidgetValue(widgetValue, value)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValue(value)
+    return true
+  end)
+end
+
+local function setValueChangeCallback(widgetValue, callback)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValueChangeCallback(callback)
+    return true
+  end)
+end
+
+local function detectCurrentBpm()
   local editor = SV:getMainEditor()
   local project = SV:getProject()
   local timeAxis = project:getTimeAxis()
   local currentGroup = editor:getCurrentGroup()
 
   if currentGroup == nil then
-    SV:showMessageBox("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    setWidgetValue(statusValue, "未检测到当前音符组。")
+    return nil, 0
+  end
+
+  local groupOnset = getGroupOnset(currentGroup)
+  local detectedBPM = getTempoAt(timeAxis, groupOnset)
+  local tempoMarkCount = getTempoMarkCount(timeAxis)
+
+  return detectedBPM, tempoMarkCount
+end
+
+local function refreshDetectedBpm()
+  local detectedBPM, tempoMarkCount = detectCurrentBpm()
+  if detectedBPM == nil then
+    return
+  end
+
+  setWidgetValue(currentBpmValue, formatNumber(detectedBPM))
+  setWidgetValue(originalBpmValue, formatNumber(detectedBPM / 2))
+
+  local status = "检测 BPM: " .. formatNumber(detectedBPM)
+  if tempoMarkCount > 1 then
+    status = status .. " | 多个 BPM 标记"
+  end
+
+  setWidgetValue(statusValue, status)
+end
+
+local function runPanel()
+  if isRunning then
+    return
+  end
+
+  isRunning = true
+
+  local editor = SV:getMainEditor()
+  local project = SV:getProject()
+  local timeAxis = project:getTimeAxis()
+  local currentGroup = editor:getCurrentGroup()
+
+  if currentGroup == nil then
+    showMessage("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    isRunning = false
     return
   end
 
   local groupTarget = currentGroup:getTarget()
 
   if groupTarget == nil then
-    SV:showMessageBox("错误", "未检测到选中的轨道或音符组，请先选中一个轨道。")
+    showMessage("错误", "未检测到选中的轨道或音符组，请先选中一个轨道。")
+    isRunning = false
     return
   end
 
   local groupOnset = getGroupOnset(currentGroup)
-  local detectedBPM = getTempoAt(timeAxis, groupOnset)
   local tempoMarkCount = getTempoMarkCount(timeAxis)
-  local tempoWarning = ""
 
-  if tempoMarkCount > 1 then
-    tempoWarning =
-      "\n\n检测到工程中有多个 BPM 标记。本脚本只按单一比例缩放，不会执行完整 tempo map 转换。"
-  end
-
-  local inputForm = {
-    title = "BPM 缩放修复",
-    message = "将缩放当前音符组目标内的音符、参数点和 Studio 2 音高控制。\n当前引用位置 BPM: "
-      .. formatNumber(detectedBPM)
-      .. tempoWarning,
-    buttons = "OkCancel",
-    widgets = {
-      {
-        name = "currentBpm",
-        type = "TextBox",
-        label = "当前工程 BPM (Current BPM)",
-        default = formatNumber(detectedBPM),
-      },
-      {
-        name = "originalBpm",
-        type = "TextBox",
-        label = "原始 MIDI/轨道 BPM (Original BPM)",
-        default = formatNumber(detectedBPM / 2),
-      },
-      {
-        name = "anchorMode",
-        type = "ComboBox",
-        label = "缩放锚点 (Anchor)",
-        choices = {
-          "音符组内部 0 位置",
-          "第一个音符起点",
-        },
-        default = 0,
-      },
-      {
-        name = "processAutomation",
-        type = "CheckBox",
-        text = "同时缩放参数曲线",
-        default = true,
-      },
-      {
-        name = "processPitchControls",
-        type = "CheckBox",
-        text = "同时缩放 Studio 2 音高控制点/曲线",
-        default = true,
-      },
-    },
-  }
-
-  local result = SV:showCustomDialog(inputForm)
-  if not result or not result.status then
-    return
-  end
-
-  local currentBPM = tonumber(result.answers.currentBpm)
-  local originalBPM = tonumber(result.answers.originalBpm)
+  local currentBPM = tonumber(getWidgetValue(currentBpmValue, ""))
+  local originalBPM = tonumber(getWidgetValue(originalBpmValue, ""))
 
   if currentBPM == nil or currentBPM <= 0 or originalBPM == nil or originalBPM <= 0 then
-    SV:showMessageBox("错误", "请输入有效的 BPM 数值。")
+    showMessage("错误", "请输入有效的 BPM 数值。")
+    isRunning = false
     return
   end
 
@@ -401,7 +461,7 @@ function main()
   local anchor = 0
   local anchorLabel = "音符组内部 0 位置"
 
-  if result.answers.anchorMode == 1 then
+  if getWidgetValue(anchorModeValue, 0) == 1 then
     anchor = getFirstNoteOnset(groupTarget)
     anchorLabel = "第一个音符起点"
   end
@@ -410,11 +470,11 @@ function main()
   local automationStats = { tracks = 0, points = 0, keptPoints = 0, collisions = 0 }
   local pitchStats = { objects = 0, curvePoints = 0 }
 
-  if result.answers.processAutomation then
+  if getWidgetValue(processAutomationValue, true) then
     automationStats = rescaleAutomation(groupTarget, anchor, ratio)
   end
 
-  if result.answers.processPitchControls then
+  if getWidgetValue(processPitchControlsValue, true) then
     pitchStats = rescalePitchControls(groupTarget, anchor, ratio)
   end
 
@@ -462,6 +522,122 @@ function main()
       .. "\n\n注意: 当前脚本修改的是音符组目标。如果该目标被多个引用复用，其他引用也会同步变化。"
   end
 
-  SV:showMessageBox("完成", summary)
-  SV:finish()
+  showMessage("完成", summary)
+  setWidgetValue(statusValue, "完成缩放，引用位置 BPM: " .. formatNumber(getTempoAt(timeAxis, groupOnset)))
+  isRunning = false
+end
+
+local function initializePanel()
+  if initialized then
+    return
+  end
+
+  initialized = true
+  currentBpmValue = createWidgetValue("120")
+  originalBpmValue = createWidgetValue("60")
+  anchorModeValue = createWidgetValue(0)
+  processAutomationValue = createWidgetValue(true)
+  processPitchControlsValue = createWidgetValue(true)
+  runButtonValue = createWidgetValue(false)
+  detectButtonValue = createWidgetValue(false)
+  statusValue = createWidgetValue("")
+
+  setValueChangeCallback(runButtonValue, function()
+    runPanel()
+  end)
+
+  setValueChangeCallback(detectButtonValue, function()
+    refreshDetectedBpm()
+  end)
+
+  refreshDetectedBpm()
+end
+
+local function textBoxRow(value)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "TextBox",
+        value = value,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+local function checkboxRow(text, value)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "CheckBox",
+        text = text,
+        value = value,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  return {
+    title = "BPM Rescaler",
+    rows = {
+      {
+        type = "Label",
+        text = "Status",
+      },
+      textBoxRow(statusValue),
+      {
+        type = "Label",
+        text = "Current BPM",
+      },
+      textBoxRow(currentBpmValue),
+      {
+        type = "Label",
+        text = "Original BPM",
+      },
+      textBoxRow(originalBpmValue),
+      {
+        type = "Label",
+        text = "Anchor",
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = {
+              "音符组内部 0 位置",
+              "第一个音符起点",
+            },
+            value = anchorModeValue,
+            width = 1.0,
+          },
+        },
+      },
+      checkboxRow("同时缩放参数曲线", processAutomationValue),
+      checkboxRow("同时缩放 Studio 2 音高控制点/曲线", processPitchControlsValue),
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "Button",
+            text = "Detect BPM",
+            value = detectButtonValue,
+            width = 0.45,
+          },
+          {
+            type = "Button",
+            text = "Run",
+            value = runButtonValue,
+            width = 0.55,
+          },
+        },
+      },
+    },
+  }
 end

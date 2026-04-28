@@ -23,7 +23,7 @@ It can write:
 ## Usage
 
 1. Select one or more notes in the piano roll.
-2. Run `Crying Effect`.
+2. Open the `Crying Effect` panel in the Scripts side panel.
 3. Choose a crying preset. `Natural cry (Recommended)` is ready to use as the default.
 4. Enable the modules to generate: vibrato envelope, breathiness, tension, and tail pitch drop.
 5. Set preset strength and write mode.
@@ -32,7 +32,8 @@ It can write:
    - Peak position
    - Release position
 7. Configure tension randomness, fixed random output, pitch drop start, pitch drop depth, and whether pitch drop should apply only to the last note of each selected range.
-8. Click OK.
+8. Click `Refresh` if you want to update the selected-note count.
+9. Click `Run`.
 
 ## Write Modes
 
@@ -43,6 +44,7 @@ It can write:
 ## Notes
 
 - Output values are clamped to the official automation range for each parameter.
+- This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
 - Fixed random output is enabled by default, making repeated runs more reproducible.
 - Presets override the advanced envelope and drop values; the advanced sliders are mainly for the `Custom` preset.
 - Pitch gestures are added relative to the current `pitchDelta` curve instead of forcing it back to zero.

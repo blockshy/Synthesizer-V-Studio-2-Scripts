@@ -3,8 +3,9 @@ function getClientInfo()
     name = "Crying Effect",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 6,
-    minEditorVersion = 65537,
+    versionNumber = 7,
+    minEditorVersion = 131330,
+    type = "SidePanelSection",
   }
 end
 
@@ -679,178 +680,155 @@ local function buildSummary(noteCount, taskCount, processedPitchDrops, tasks, sk
   return summary
 end
 
-function main()
+local presetValue = nil
+local intensityValue = nil
+local writeModeValue = nil
+local addVibratoValue = nil
+local addBreathValue = nil
+local addTensionValue = nil
+local addPitchDropValue = nil
+local attackPercentValue = nil
+local peakPercentValue = nil
+local releasePercentValue = nil
+local randomAmountValue = nil
+local fixedRandomValue = nil
+local dropStartPercentValue = nil
+local dropDepthValue = nil
+local dropLastNotesOnlyValue = nil
+local restorePitchValue = nil
+local runButtonValue = nil
+local refreshButtonValue = nil
+local statusValue = nil
+local initialized = false
+local isRunning = false
+
+local function showMessage(title, message)
+  safeCall(function()
+    SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+end
+
+local function createWidgetValue(defaultValue)
+  local widgetValue = safeCall(function()
+    return SV:create("WidgetValue")
+  end)
+
+  if widgetValue ~= nil then
+    safeCall(function()
+      widgetValue:setValue(defaultValue)
+      return true
+    end)
+  end
+
+  return widgetValue
+end
+
+local function getWidgetValue(widgetValue, fallback)
+  if widgetValue == nil then
+    return fallback
+  end
+
+  local value = safeCall(function()
+    return widgetValue:getValue()
+  end)
+
+  if value == nil then
+    return fallback
+  end
+
+  return value
+end
+
+local function setWidgetValue(widgetValue, value)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValue(value)
+    return true
+  end)
+end
+
+local function setValueChangeCallback(widgetValue, callback)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setValueChangeCallback(callback)
+    return true
+  end)
+end
+
+local function updateStatus()
+  local editor = SV:getMainEditor()
+  local selection = editor:getSelection()
+  local selectedNotes = getSortedSelectedNotes(selection)
+  setWidgetValue(statusValue, "选中音符: " .. #selectedNotes)
+end
+
+local function buildPanelAnswers()
+  return {
+    preset = getWidgetValue(presetValue, 1),
+    intensity = getWidgetValue(intensityValue, 1.0),
+    writeMode = getWidgetValue(writeModeValue, 0),
+    addVibrato = getWidgetValue(addVibratoValue, true),
+    addBreath = getWidgetValue(addBreathValue, true),
+    addTension = getWidgetValue(addTensionValue, true),
+    addPitchDrop = getWidgetValue(addPitchDropValue, true),
+    attackPercent = getWidgetValue(attackPercentValue, 12),
+    peakPercent = getWidgetValue(peakPercentValue, 45),
+    releasePercent = getWidgetValue(releasePercentValue, 88),
+    randomAmount = getWidgetValue(randomAmountValue, 0.12),
+    fixedRandom = getWidgetValue(fixedRandomValue, true),
+    dropStartPercent = getWidgetValue(dropStartPercentValue, 75),
+    dropDepth = getWidgetValue(dropDepthValue, 150),
+    dropLastNotesOnly = getWidgetValue(dropLastNotesOnlyValue, false),
+    restorePitch = getWidgetValue(restorePitchValue, false),
+  }
+end
+
+local function runPanel()
+  if isRunning then
+    return
+  end
+
+  isRunning = true
+
   local editor = SV:getMainEditor()
   local selection = editor:getSelection()
   local selectedNotes = getSortedSelectedNotes(selection)
 
   if #selectedNotes == 0 then
-    SV:showMessageBox("提示", "请先在钢琴窗中选中一个或多个音符。")
-    return
-  end
-
-  local inputForm = {
-    title = "自动哭腔参数设置 V6",
-    message = "选择预设即可直接生成哭腔。自定义预设会使用下方高级包络和下坠参数。",
-    buttons = "OkCancel",
-    widgets = {
-      {
-        name = "preset",
-        type = "ComboBox",
-        label = "哭腔预设",
-        choices = buildPresetChoices(),
-        default = 1,
-      },
-      {
-        name = "intensity",
-        type = "Slider",
-        label = "预设强度倍率",
-        format = "%1.1f",
-        minValue = 0.5,
-        maxValue = 1.6,
-        interval = 0.1,
-        default = 1.0,
-      },
-      {
-        name = "writeMode",
-        type = "ComboBox",
-        label = "写入模式",
-        choices = {
-          "覆盖选中音符范围",
-          "仅追加/更新同位置点",
-          "清空已启用参数后重建",
-        },
-        default = 0,
-      },
-      {
-        name = "addVibrato",
-        type = "CheckBox",
-        text = "添加颤音包络",
-        default = true,
-      },
-      {
-        name = "addBreath",
-        type = "CheckBox",
-        text = "添加气声",
-        default = true,
-      },
-      {
-        name = "addTension",
-        type = "CheckBox",
-        text = "添加张力",
-        default = true,
-      },
-      {
-        name = "addPitchDrop",
-        type = "CheckBox",
-        text = "添加音高哭腔/尾部下坠",
-        default = true,
-      },
-      {
-        name = "attackPercent",
-        type = "Slider",
-        label = "起势位置 (%)",
-        format = "%1.0f",
-        minValue = 0,
-        maxValue = 40,
-        interval = 1,
-        default = 12,
-      },
-      {
-        name = "peakPercent",
-        type = "Slider",
-        label = "峰值位置 (%)",
-        format = "%1.0f",
-        minValue = 20,
-        maxValue = 80,
-        interval = 1,
-        default = 45,
-      },
-      {
-        name = "releasePercent",
-        type = "Slider",
-        label = "回落位置 (%)",
-        format = "%1.0f",
-        minValue = 60,
-        maxValue = 100,
-        interval = 1,
-        default = 88,
-      },
-      {
-        name = "randomAmount",
-        type = "Slider",
-        label = "张力随机量",
-        format = "%1.2f",
-        minValue = 0,
-        maxValue = 0.4,
-        interval = 0.01,
-        default = 0.12,
-      },
-      {
-        name = "fixedRandom",
-        type = "CheckBox",
-        text = "固定随机结果",
-        default = true,
-      },
-      {
-        name = "dropStartPercent",
-        type = "Slider",
-        label = "下坠开始位置 (%)",
-        format = "%1.0f",
-        minValue = 40,
-        maxValue = 95,
-        interval = 1,
-        default = 75,
-      },
-      {
-        name = "dropDepth",
-        type = "Slider",
-        label = "下坠深度 (cents)",
-        format = "%1.0f",
-        minValue = 20,
-        maxValue = 400,
-        interval = 5,
-        default = 150,
-      },
-      {
-        name = "dropLastNotesOnly",
-        type = "CheckBox",
-        text = "仅对每段选区最后一个音符添加下坠",
-        default = false,
-      },
-      {
-        name = "restorePitch",
-        type = "CheckBox",
-        text = "尾后恢复音高偏移",
-        default = false,
-      },
-    },
-  }
-
-  local result = SV:showCustomDialog(inputForm)
-  if not result or not result.status then
+    showMessage("提示", "请先在钢琴窗中选中一个或多个音符。")
+    isRunning = false
     return
   end
 
   local currentGroup = editor:getCurrentGroup()
   if currentGroup == nil then
-    SV:showMessageBox("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    showMessage("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    isRunning = false
     return
   end
 
   local groupTarget = currentGroup:getTarget()
   if groupTarget == nil then
-    SV:showMessageBox("错误", "未检测到当前音符组目标。")
+    showMessage("错误", "未检测到当前音符组目标。")
+    isRunning = false
     return
   end
 
-  local options = resolveOptions(result.answers)
+  local options = resolveOptions(buildPanelAnswers())
 
   local tasks, skipped = getEnabledTasks(groupTarget, options)
   local taskCount = countTasks(tasks)
 
   if taskCount == 0 then
-    SV:showMessageBox("提示", "没有可用或启用的参数，未写入任何点。")
+    showMessage("提示", "没有可用或启用的参数，未写入任何点。")
+    isRunning = false
     return
   end
 
@@ -874,6 +852,165 @@ function main()
       .. "\n\n注意: 参数写入当前音符组目标；如果该目标被多个引用复用，其他引用也会同步变化。"
   end
 
-  SV:showMessageBox("完成", summary)
-  SV:finish()
+  showMessage("完成", summary)
+  updateStatus()
+  isRunning = false
+end
+
+local function initializePanel()
+  if initialized then
+    return
+  end
+
+  initialized = true
+  presetValue = createWidgetValue(1)
+  intensityValue = createWidgetValue(1.0)
+  writeModeValue = createWidgetValue(0)
+  addVibratoValue = createWidgetValue(true)
+  addBreathValue = createWidgetValue(true)
+  addTensionValue = createWidgetValue(true)
+  addPitchDropValue = createWidgetValue(true)
+  attackPercentValue = createWidgetValue(12)
+  peakPercentValue = createWidgetValue(45)
+  releasePercentValue = createWidgetValue(88)
+  randomAmountValue = createWidgetValue(0.12)
+  fixedRandomValue = createWidgetValue(true)
+  dropStartPercentValue = createWidgetValue(75)
+  dropDepthValue = createWidgetValue(150)
+  dropLastNotesOnlyValue = createWidgetValue(false)
+  restorePitchValue = createWidgetValue(false)
+  runButtonValue = createWidgetValue(false)
+  refreshButtonValue = createWidgetValue(false)
+  statusValue = createWidgetValue("")
+
+  setValueChangeCallback(runButtonValue, function()
+    runPanel()
+  end)
+
+  setValueChangeCallback(refreshButtonValue, function()
+    updateStatus()
+  end)
+
+  updateStatus()
+end
+
+local function checkboxRow(text, value)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "CheckBox",
+        text = text,
+        value = value,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+local function sliderRow(label, value, format, minValue, maxValue, interval)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "Slider",
+        label = label,
+        value = value,
+        format = format,
+        minValue = minValue,
+        maxValue = maxValue,
+        interval = interval,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  return {
+    title = "Crying Effect",
+    rows = {
+      {
+        type = "Label",
+        text = "Selection",
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "TextBox",
+            value = statusValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = "Preset",
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = buildPresetChoices(),
+            value = presetValue,
+            width = 1.0,
+          },
+        },
+      },
+      sliderRow("预设强度倍率", intensityValue, "%1.1f", 0.5, 1.6, 0.1),
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = {
+              "覆盖选中音符范围",
+              "仅追加/更新同位置点",
+              "清空已启用参数后重建",
+            },
+            value = writeModeValue,
+            width = 1.0,
+          },
+        },
+      },
+      checkboxRow("添加颤音包络", addVibratoValue),
+      checkboxRow("添加气声", addBreathValue),
+      checkboxRow("添加张力", addTensionValue),
+      checkboxRow("添加音高哭腔/尾部下坠", addPitchDropValue),
+      {
+        type = "Label",
+        text = "Custom Envelope",
+      },
+      sliderRow("起势位置 (%)", attackPercentValue, "%1.0f", 0, 40, 1),
+      sliderRow("峰值位置 (%)", peakPercentValue, "%1.0f", 20, 80, 1),
+      sliderRow("回落位置 (%)", releasePercentValue, "%1.0f", 60, 100, 1),
+      sliderRow("张力随机量", randomAmountValue, "%1.2f", 0, 0.4, 0.01),
+      checkboxRow("固定随机结果", fixedRandomValue),
+      sliderRow("下坠开始位置 (%)", dropStartPercentValue, "%1.0f", 40, 95, 1),
+      sliderRow("下坠深度 (cents)", dropDepthValue, "%1.0f", 20, 400, 5),
+      checkboxRow("仅对每段选区最后一个音符添加下坠", dropLastNotesOnlyValue),
+      checkboxRow("尾后恢复音高偏移", restorePitchValue),
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "Button",
+            text = "Refresh",
+            value = refreshButtonValue,
+            width = 0.35,
+          },
+          {
+            type = "Button",
+            text = "Run",
+            value = runButtonValue,
+            width = 0.65,
+          },
+        },
+      },
+    },
+  }
 end

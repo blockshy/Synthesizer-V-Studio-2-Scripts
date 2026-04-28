@@ -15,16 +15,17 @@ It can process:
 ## Usage
 
 1. Select notes in the piano roll, or select note groups in the arrangement.
-2. Run `Flatten Pitch Curve`.
+2. Open the `Flatten Pitch Curve` panel in the Scripts side panel.
 3. Choose the processing scope: selected notes, selected note groups, or both.
 4. Keep `Draw horizontal Studio 2 Pitch Control Curve` enabled.
 5. Choose whether to also reset the `pitchDelta` curve.
 6. Choose whether to first remove existing Studio 2 pitch controls in the range.
-7. Click OK to apply.
+7. Click `Run`.
 
 ## Notes
 
 - The script does not change note pitch, lyrics, duration, or position.
+- This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
 - Resetting only `pitchDelta` is not enough to flatten SV2's generated pitch; the default behavior also writes horizontal Pitch Control Curves.
 - By default, the script writes guard points next to the selected range to reduce changes outside the flattened area.
 - When processing note groups, the script modifies the note group target. If the target is reused by multiple references, those references will change as well.
