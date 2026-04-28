@@ -14,7 +14,7 @@ function main()
   local selectedNotes = selection:getSelectedNotes()
 
   if #selectedNotes == 0 then
-    SV:showMessageBox("提示", "请先选中需要处理的音符。", 0)
+    SV:showMessageBox("提示", "请先选中需要处理的音符。")
     return
   end
 

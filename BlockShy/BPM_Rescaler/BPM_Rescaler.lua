@@ -319,14 +319,14 @@ function main()
   local currentGroup = editor:getCurrentGroup()
 
   if currentGroup == nil then
-    SV:showMessageBox("错误", "未检测到当前音符组，请先选中一个轨道或音符组。", 0)
+    SV:showMessageBox("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
     return
   end
 
   local groupTarget = currentGroup:getTarget()
 
   if groupTarget == nil then
-    SV:showMessageBox("错误", "未检测到选中的轨道或音符组，请先选中一个轨道。", 0)
+    SV:showMessageBox("错误", "未检测到选中的轨道或音符组，请先选中一个轨道。")
     return
   end
 
@@ -393,7 +393,7 @@ function main()
   local originalBPM = tonumber(result.answers.originalBpm)
 
   if currentBPM == nil or currentBPM <= 0 or originalBPM == nil or originalBPM <= 0 then
-    SV:showMessageBox("错误", "请输入有效的 BPM 数值。", 0)
+    SV:showMessageBox("错误", "请输入有效的 BPM 数值。")
     return
   end
 
@@ -462,6 +462,6 @@ function main()
       .. "\n\n注意: 当前脚本修改的是音符组目标。如果该目标被多个引用复用，其他引用也会同步变化。"
   end
 
-  SV:showMessageBox("完成", summary, 0)
+  SV:showMessageBox("完成", summary)
   SV:finish()
 end

@@ -15,7 +15,7 @@ function main()
 
   -- 检查是否有选中音符
   if #selectedNotes == 0 then
-    SV:showMessageBox("提示", "请先在钢琴窗中选中一个或多个音符。", 0)
+    SV:showMessageBox("提示", "请先在钢琴窗中选中一个或多个音符。")
     return
   end
 
