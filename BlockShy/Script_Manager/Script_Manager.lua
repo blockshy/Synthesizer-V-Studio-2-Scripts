@@ -3,7 +3,7 @@ function getClientInfo()
     name = "BlockShy Script Manager",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 1,
+    versionNumber = 2,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -143,28 +143,97 @@ local function getManagedPath(entry)
   return MANAGED_DIRECTORY .. "/" .. entry.folder .. "/" .. entry.file
 end
 
+local function normalizePath(path)
+  if type(path) ~= "string" or path == "" then
+    return nil
+  end
+
+  return path:gsub("\\", "/")
+end
+
+local function dirname(path)
+  path = normalizePath(path)
+  if path == nil then
+    return nil
+  end
+
+  local directory = path:match("^(.*)/[^/]*$")
+  if directory == nil or directory == "" then
+    return nil
+  end
+
+  return directory
+end
+
+local function joinPath(basePath, relativePath)
+  basePath = normalizePath(basePath)
+  relativePath = normalizePath(relativePath)
+
+  if basePath == nil then
+    return relativePath
+  end
+
+  if relativePath == nil then
+    return basePath
+  end
+
+  if basePath:sub(-1) == "/" then
+    return basePath .. relativePath
+  end
+
+  return basePath .. "/" .. relativePath
+end
+
+local function getCurrentScriptPath()
+  local info = safeCall(function()
+    if type(debug) ~= "table" or type(debug.getinfo) ~= "function" then
+      return nil
+    end
+
+    return debug.getinfo(1, "S")
+  end)
+
+  if type(info) ~= "table" or type(info.source) ~= "string" then
+    return nil
+  end
+
+  if info.source:sub(1, 1) ~= "@" then
+    return nil
+  end
+
+  return normalizePath(info.source:sub(2))
+end
+
+local function appendCandidate(candidates, seen, path)
+  path = normalizePath(path)
+  if path == nil or seen[path] then
+    return
+  end
+
+  seen[path] = true
+  table.insert(candidates, path)
+end
+
 local function getPathCandidates(entry)
   local managedPath = getManagedPath(entry)
+  local scriptRelativePath = entry.folder .. "/" .. entry.file
+  local managerDirectory = dirname(getCurrentScriptPath())
+  local authorDirectory = dirname(managerDirectory)
+  local scriptsDirectory = dirname(authorDirectory)
   local siblingPath = "../" .. entry.folder .. "/" .. entry.file
   local authorRootPath = entry.folder .. "/" .. entry.file
 
-  local rawCandidates = {
-    managedPath,
-    "./" .. managedPath,
-    authorRootPath,
-    "./" .. authorRootPath,
-    siblingPath,
-    "./" .. siblingPath,
-  }
-
   local seen = {}
   local candidates = {}
-  for _, path in ipairs(rawCandidates) do
-    if not seen[path] then
-      seen[path] = true
-      table.insert(candidates, path)
-    end
-  end
+  appendCandidate(candidates, seen, joinPath(authorDirectory, scriptRelativePath))
+  appendCandidate(candidates, seen, joinPath(scriptsDirectory, managedPath))
+  appendCandidate(candidates, seen, joinPath(managerDirectory, siblingPath))
+  appendCandidate(candidates, seen, managedPath)
+  appendCandidate(candidates, seen, "./" .. managedPath)
+  appendCandidate(candidates, seen, authorRootPath)
+  appendCandidate(candidates, seen, "./" .. authorRootPath)
+  appendCandidate(candidates, seen, siblingPath)
+  appendCandidate(candidates, seen, "./" .. siblingPath)
 
   return candidates
 end

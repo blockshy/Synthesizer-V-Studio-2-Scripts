@@ -28,6 +28,5 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 
 - The manager uses an explicit registry and does not scan arbitrary directories.
 - Managed scripts still keep their original top-menu Scripts entries.
-- The manager loads scripts from registered paths; update the registry if script folders are moved.
+- The manager first resolves sibling script folders from its own script path, then falls back to relative paths; update the registry if script folders are moved.
 - `SV:finish()` inside loaded menu scripts is ignored in the manager environment so the side-panel script remains active.
-
