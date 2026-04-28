@@ -8,7 +8,7 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 - Lists registered scripts in a compact selector.
 - Shows each script's purpose, prerequisites, usage, and managed path.
 - Shows the current selected-note, selected-group, and current-group status.
-- Runs the original menu scripts through the `Run` button.
+- Runs the embedded same-version script source through the `Run` button.
 
 ## Managed Scripts
 
@@ -28,5 +28,6 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 
 - The manager uses an explicit registry and does not scan arbitrary directories.
 - Managed scripts still keep their original top-menu Scripts entries.
-- The manager first resolves sibling script folders from its own script path, then falls back to relative paths; update the registry if script folders are moved.
+- Side-panel execution uses embedded script source and does not depend on `loadfile()` or relative script directory paths.
+- If a managed menu script changes behavior, update the manager's embedded source as well.
 - `SV:finish()` inside loaded menu scripts is ignored in the manager environment so the side-panel script remains active.
