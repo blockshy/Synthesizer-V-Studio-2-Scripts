@@ -1,3 +1,6 @@
 *
+!.luacheckrc
+!.stylua.toml
+!AGENTS.md
 !BlockShy/
 !BlockShy/**
