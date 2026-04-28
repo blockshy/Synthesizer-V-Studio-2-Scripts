@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Crying Effect",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 5,
+    versionNumber = 6,
     minEditorVersion = 65537,
   }
 end
@@ -17,6 +17,116 @@ local PARAM_DEFS = {
   tension = { label = "张力", defaultMin = -1.0, defaultMax = 1.0 },
   pitchDelta = { label = "音高偏移", defaultMin = -1200.0, defaultMax = 1200.0 },
 }
+
+local CRY_PRESETS = {
+  {
+    label = "轻微哽咽",
+    intensityScale = 0.75,
+    attackPercent = 16,
+    peakPercent = 48,
+    releasePercent = 86,
+    vibratoPeak = 0.16,
+    vibratoTail = 0.08,
+    breathPeak = 0.18,
+    breathTail = 0.09,
+    tensionPeak = 0.22,
+    tensionTail = 0.08,
+    randomAmount = 0.05,
+    pitchCatch = 16,
+    pitchDip = 8,
+    wobbleDepth = 9,
+    wobbleCycles = 1,
+    dropStartPercent = 82,
+    dropDepth = 65,
+    dropLastNotesOnly = false,
+  },
+  {
+    label = "自然哭腔（推荐）",
+    intensityScale = 1.0,
+    attackPercent = 12,
+    peakPercent = 46,
+    releasePercent = 88,
+    vibratoPeak = 0.28,
+    vibratoTail = 0.14,
+    breathPeak = 0.32,
+    breathTail = 0.16,
+    tensionPeak = 0.36,
+    tensionTail = 0.14,
+    randomAmount = 0.09,
+    pitchCatch = 28,
+    pitchDip = 14,
+    wobbleDepth = 16,
+    wobbleCycles = 2,
+    dropStartPercent = 76,
+    dropDepth = 120,
+    dropLastNotesOnly = false,
+  },
+  {
+    label = "明显哭腔",
+    intensityScale = 1.15,
+    attackPercent = 10,
+    peakPercent = 42,
+    releasePercent = 90,
+    vibratoPeak = 0.42,
+    vibratoTail = 0.22,
+    breathPeak = 0.44,
+    breathTail = 0.24,
+    tensionPeak = 0.52,
+    tensionTail = 0.22,
+    randomAmount = 0.13,
+    pitchCatch = 42,
+    pitchDip = 22,
+    wobbleDepth = 24,
+    wobbleCycles = 2,
+    dropStartPercent = 72,
+    dropDepth = 175,
+    dropLastNotesOnly = false,
+  },
+  {
+    label = "强烈哭腔",
+    intensityScale = 1.3,
+    attackPercent = 8,
+    peakPercent = 38,
+    releasePercent = 92,
+    vibratoPeak = 0.58,
+    vibratoTail = 0.3,
+    breathPeak = 0.58,
+    breathTail = 0.32,
+    tensionPeak = 0.72,
+    tensionTail = 0.3,
+    randomAmount = 0.18,
+    pitchCatch = 62,
+    pitchDip = 34,
+    wobbleDepth = 36,
+    wobbleCycles = 3,
+    dropStartPercent = 68,
+    dropDepth = 260,
+    dropLastNotesOnly = false,
+  },
+  {
+    label = "尾音哽咽",
+    intensityScale = 1.05,
+    attackPercent = 22,
+    peakPercent = 66,
+    releasePercent = 96,
+    vibratoPeak = 0.34,
+    vibratoTail = 0.3,
+    breathPeak = 0.36,
+    breathTail = 0.32,
+    tensionPeak = 0.42,
+    tensionTail = 0.28,
+    randomAmount = 0.08,
+    pitchCatch = 16,
+    pitchDip = 10,
+    wobbleDepth = 22,
+    wobbleCycles = 2,
+    dropStartPercent = 70,
+    dropDepth = 220,
+    dropLastNotesOnly = true,
+  },
+}
+
+local CUSTOM_PRESET_INDEX = #CRY_PRESETS
 
 local function safeCall(fn)
   local ok, result = pcall(fn)
@@ -38,6 +148,17 @@ end
 
 local function roundBlick(value)
   return math.floor(value + 0.5)
+end
+
+local function buildPresetChoices()
+  local choices = {}
+
+  for _, preset in ipairs(CRY_PRESETS) do
+    table.insert(choices, preset.label)
+  end
+
+  table.insert(choices, "自定义（使用下方高级参数）")
+  return choices
 end
 
 local function getParameterSafe(group, typeName)
@@ -280,6 +401,65 @@ local function randomJitter(amount)
   return (math.random() - 0.5) * 2.0 * amount
 end
 
+local function resolveOptions(answers)
+  local presetIndex = answers.preset or 1
+  local intensity = answers.intensity or 1.0
+  local preset = CRY_PRESETS[presetIndex + 1]
+
+  local options = {
+    presetLabel = "自定义",
+    intensity = intensity,
+    writeMode = answers.writeMode,
+    addVibrato = answers.addVibrato,
+    addBreath = answers.addBreath,
+    addTension = answers.addTension,
+    addPitchDrop = answers.addPitchDrop,
+    attackPercent = answers.attackPercent,
+    peakPercent = answers.peakPercent,
+    releasePercent = answers.releasePercent,
+    randomAmount = answers.randomAmount,
+    fixedRandom = answers.fixedRandom,
+    vibratoPeak = 0.32,
+    vibratoTail = 0.18,
+    breathPeak = 0.42,
+    breathTail = 0.22,
+    tensionPeak = 0.42,
+    tensionTail = 0.18,
+    pitchCatch = (answers.dropDepth or 150) * 0.22,
+    pitchDip = (answers.dropDepth or 150) * 0.12,
+    wobbleDepth = (answers.dropDepth or 150) * 0.12,
+    wobbleCycles = 2,
+    dropStartPercent = answers.dropStartPercent,
+    dropDepth = answers.dropDepth,
+    dropLastNotesOnly = answers.dropLastNotesOnly,
+    restorePitch = answers.restorePitch,
+  }
+
+  if presetIndex ~= CUSTOM_PRESET_INDEX and preset then
+    options.presetLabel = preset.label
+    options.intensity = intensity * preset.intensityScale
+    options.attackPercent = preset.attackPercent
+    options.peakPercent = preset.peakPercent
+    options.releasePercent = preset.releasePercent
+    options.randomAmount = preset.randomAmount * intensity
+    options.vibratoPeak = preset.vibratoPeak
+    options.vibratoTail = preset.vibratoTail
+    options.breathPeak = preset.breathPeak
+    options.breathTail = preset.breathTail
+    options.tensionPeak = preset.tensionPeak
+    options.tensionTail = preset.tensionTail
+    options.pitchCatch = preset.pitchCatch
+    options.pitchDip = preset.pitchDip
+    options.wobbleDepth = preset.wobbleDepth
+    options.wobbleCycles = preset.wobbleCycles
+    options.dropStartPercent = preset.dropStartPercent
+    options.dropDepth = preset.dropDepth
+    options.dropLastNotesOnly = preset.dropLastNotesOnly or answers.dropLastNotesOnly
+  end
+
+  return options
+end
+
 local function normalizeEnvelopePositions(options)
   if options.attackPercent < 0 then
     options.attackPercent = 0
@@ -297,17 +477,17 @@ end
 
 local function buildVibratoEnvelope(task, note, options)
   addEnvelopePoint(task, note, 0, 1.0)
-  addEnvelopePoint(task, note, options.attackPercent, 1.0 + (0.08 * options.intensity))
-  addEnvelopePoint(task, note, options.peakPercent, 1.0 + (0.32 * options.intensity))
-  addEnvelopePoint(task, note, options.releasePercent, 1.0 + (0.18 * options.intensity))
+  addEnvelopePoint(task, note, options.attackPercent, 1.0 + (options.vibratoPeak * 0.35 * options.intensity))
+  addEnvelopePoint(task, note, options.peakPercent, 1.0 + (options.vibratoPeak * options.intensity))
+  addEnvelopePoint(task, note, options.releasePercent, 1.0 + (options.vibratoTail * options.intensity))
   addEnvelopePoint(task, note, 100, 1.0)
 end
 
 local function buildBreathEnvelope(task, note, options)
   addEnvelopePoint(task, note, 0, 0.0)
-  addEnvelopePoint(task, note, options.attackPercent, 0.16 * options.intensity)
-  addEnvelopePoint(task, note, options.peakPercent, 0.42 * options.intensity)
-  addEnvelopePoint(task, note, options.releasePercent, 0.22 * options.intensity)
+  addEnvelopePoint(task, note, options.attackPercent, options.breathPeak * 0.35 * options.intensity)
+  addEnvelopePoint(task, note, options.peakPercent, options.breathPeak * options.intensity)
+  addEnvelopePoint(task, note, options.releasePercent, options.breathTail * options.intensity)
   addEnvelopePoint(task, note, 100, 0.0)
 end
 
@@ -317,35 +497,80 @@ local function buildTensionEnvelope(task, note, options)
     task,
     note,
     options.attackPercent,
-    (0.12 * options.intensity) + randomJitter(options.randomAmount * 0.5)
+    (options.tensionPeak * 0.35 * options.intensity) + randomJitter(options.randomAmount * 0.5)
   )
-  addEnvelopePoint(task, note, options.peakPercent, (0.42 * options.intensity) + randomJitter(options.randomAmount))
+  addEnvelopePoint(
+    task,
+    note,
+    options.peakPercent,
+    (options.tensionPeak * options.intensity) + randomJitter(options.randomAmount)
+  )
   addEnvelopePoint(
     task,
     note,
     options.releasePercent,
-    (0.18 * options.intensity) + randomJitter(options.randomAmount * 0.6)
+    (options.tensionTail * options.intensity) + randomJitter(options.randomAmount * 0.6)
   )
   addEnvelopePoint(task, note, 100, 0.0)
 end
 
-local function buildPitchDrop(task, note, options)
+local function addPitchOffsetPoint(task, blick, offset)
+  local baseValue = task.param:get(blick)
+  addGeneratedPoint(task, blick, baseValue + offset)
+end
+
+local function addPitchOffsetAtPercent(task, note, percent, offset)
+  addPitchOffsetPoint(task, notePosition(note, percent), offset)
+end
+
+local function buildPitchGesture(task, note, options, shouldDropTail)
   local onset = note:getOnset()
   local duration = note:getDuration()
   local dropStart = onset + roundBlick(duration * (options.dropStartPercent / 100.0))
   local dropEnd = note:getEnd()
-  local baseStart = task.param:get(dropStart)
-  local dropAmount = -options.dropDepth * options.intensity
 
-  addGeneratedPoint(task, dropStart, baseStart)
-  addGeneratedPoint(task, dropEnd, baseStart + dropAmount)
+  addPitchOffsetPoint(task, onset, 0)
 
-  if options.restorePitch then
+  if options.pitchCatch > 0 then
+    addPitchOffsetAtPercent(task, note, math.max(6, options.attackPercent), options.pitchCatch * options.intensity)
+  end
+
+  if options.pitchDip > 0 then
+    local dipPercent = math.min(options.peakPercent, options.attackPercent + 18)
+    addPitchOffsetAtPercent(task, note, dipPercent, -options.pitchDip * options.intensity)
+  end
+
+  if options.wobbleDepth > 0 and options.wobbleCycles > 0 then
+    local wobbleStart = math.max(options.peakPercent, options.attackPercent + 20)
+    local wobbleEnd = math.max(wobbleStart + 1, options.dropStartPercent - 4)
+    local steps = options.wobbleCycles * 2
+
+    for i = 1, steps do
+      local ratio = i / steps
+      local percent = wobbleStart + ((wobbleEnd - wobbleStart) * ratio)
+      local polarity = 1
+      if i % 2 == 0 then
+        polarity = -1
+      end
+      local fade = 1.0 - (ratio * 0.35)
+      addPitchOffsetAtPercent(task, note, percent, polarity * options.wobbleDepth * options.intensity * fade)
+    end
+  end
+
+  addPitchOffsetPoint(task, dropStart, 0)
+
+  if shouldDropTail then
+    addPitchOffsetPoint(task, dropEnd, -options.dropDepth * options.intensity)
+  else
+    addPitchOffsetPoint(task, dropEnd, 0)
+  end
+
+  if shouldDropTail and options.restorePitch then
     local restoreOffset = math.floor((SV.QUARTER or 705600000) / 64)
     if restoreOffset < 1 then
       restoreOffset = 1
     end
-    addGeneratedPoint(task, dropEnd + restoreOffset, baseStart)
+    addPitchOffsetPoint(task, dropEnd + restoreOffset, 0)
   end
 end
 
@@ -369,9 +594,12 @@ local function buildEffectPoints(notes, ranges, tasks, options)
       buildTensionEnvelope(tasks.tension, note, options)
     end
 
-    if tasks.pitchDelta and (not options.dropLastNotesOnly or isLastNoteInMergedRange(note, ranges, rangeLastEnds)) then
-      buildPitchDrop(tasks.pitchDelta, note, options)
-      processedPitchDrops = processedPitchDrops + 1
+    if tasks.pitchDelta then
+      local shouldDropTail = not options.dropLastNotesOnly or isLastNoteInMergedRange(note, ranges, rangeLastEnds)
+      buildPitchGesture(tasks.pitchDelta, note, options, shouldDropTail)
+      if shouldDropTail then
+        processedPitchDrops = processedPitchDrops + 1
+      end
     end
   end
 
@@ -404,7 +632,7 @@ local function countTasks(tasks)
   return count
 end
 
-local function buildSummary(noteCount, taskCount, processedPitchDrops, tasks, skipped)
+local function buildSummary(noteCount, taskCount, processedPitchDrops, tasks, skipped, options)
   local totalGenerated = 0
   local totalRemoved = 0
   local totalCreated = 0
@@ -420,6 +648,9 @@ local function buildSummary(noteCount, taskCount, processedPitchDrops, tasks, sk
   end
 
   local summary = "哭腔参数已生成。\n"
+    .. "预设: "
+    .. options.presetLabel
+    .. "\n"
     .. "处理音符: "
     .. noteCount
     .. "\n启用参数: "
@@ -459,17 +690,24 @@ function main()
   end
 
   local inputForm = {
-    title = "自动哭腔参数设置 V5",
-    message = "为选中音符生成哭腔风格的颤音、气声、张力和相对音高下坠。",
+    title = "自动哭腔参数设置 V6",
+    message = "选择预设即可直接生成哭腔。自定义预设会使用下方高级包络和下坠参数。",
     buttons = "OkCancel",
     widgets = {
       {
+        name = "preset",
+        type = "ComboBox",
+        label = "哭腔预设",
+        choices = buildPresetChoices(),
+        default = 1,
+      },
+      {
         name = "intensity",
         type = "Slider",
-        label = "哭腔强度",
+        label = "预设强度倍率",
         format = "%1.1f",
-        minValue = 0.2,
-        maxValue = 2.0,
+        minValue = 0.5,
+        maxValue = 1.6,
         interval = 0.1,
         default = 1.0,
       },
@@ -505,7 +743,7 @@ function main()
       {
         name = "addPitchDrop",
         type = "CheckBox",
-        text = "添加尾部下坠",
+        text = "添加音高哭腔/尾部下坠",
         default = true,
       },
       {
@@ -606,23 +844,7 @@ function main()
     return
   end
 
-  local options = {
-    intensity = result.answers.intensity,
-    writeMode = result.answers.writeMode,
-    addVibrato = result.answers.addVibrato,
-    addBreath = result.answers.addBreath,
-    addTension = result.answers.addTension,
-    addPitchDrop = result.answers.addPitchDrop,
-    attackPercent = result.answers.attackPercent,
-    peakPercent = result.answers.peakPercent,
-    releasePercent = result.answers.releasePercent,
-    randomAmount = result.answers.randomAmount,
-    fixedRandom = result.answers.fixedRandom,
-    dropStartPercent = result.answers.dropStartPercent,
-    dropDepth = result.answers.dropDepth,
-    dropLastNotesOnly = result.answers.dropLastNotesOnly,
-    restorePitch = result.answers.restorePitch,
-  }
+  local options = resolveOptions(result.answers)
 
   local tasks, skipped = getEnabledTasks(groupTarget, options)
   local taskCount = countTasks(tasks)
@@ -643,7 +865,7 @@ function main()
   applyWriteMode(tasks, ranges, options.writeMode)
   writeAllTasks(tasks)
 
-  local summary = buildSummary(#selectedNotes, taskCount, processedPitchDrops, tasks, skipped)
+  local summary = buildSummary(#selectedNotes, taskCount, processedPitchDrops, tasks, skipped, options)
 
   if safeCall(function()
     return currentGroup:isMain()
