@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 3,
+    versionNumber = 4,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -12,6 +12,7 @@ end
 local SCOPE_NOTES = "notes"
 local SCOPE_GROUPS = "groups"
 local SCOPE_BOTH = "both"
+local languageValue = nil
 
 local function safeCall(fn)
   local ok, result = pcall(fn)
@@ -19,6 +20,24 @@ local function safeCall(fn)
     return result
   end
   return nil
+end
+
+local function isEnglish()
+  if languageValue == nil then
+    return false
+  end
+
+  return safeCall(function()
+    return languageValue:getValue()
+  end) == 1
+end
+
+local function tr(zh, en)
+  if isEnglish() then
+    return en
+  end
+
+  return zh
 end
 
 local function getParameterSafe(group, typeName)
@@ -583,49 +602,69 @@ local function buildSummary(operations, pitchStats, removedControlStats, drawnCo
     totalNotes = totalNotes + #operation.notes
   end
 
-  local summary = "音高曲线已抹平。\n处理音符组目标: "
-    .. #operations
-    .. "\n处理范围: "
-    .. totalRanges
-    .. "\n水平音高线目标音符: "
-    .. totalNotes
+  local summary = tr(
+    "音高曲线已抹平。\n处理音符组目标: ",
+    "Pitch curve flattened.\nNote group targets: "
+  ) .. #operations .. tr("\n处理范围: ", "\nRanges: ") .. totalRanges .. tr(
+    "\n水平音高线目标音符: ",
+    "\nFlat pitch target notes: "
+  ) .. totalNotes
 
   if options.drawFlatPitchControls then
-    summary = summary .. "\n水平 Pitch Control Curve: 创建 " .. drawnControlStats.created .. " 条"
+    summary = summary
+      .. tr("\n水平 Pitch Control Curve: 创建 ", "\nHorizontal Pitch Control Curve: created ")
+      .. drawnControlStats.created
+      .. tr(" 条", " curves")
 
     if drawnControlStats.failed > 0 then
-      summary = summary .. "，失败 " .. drawnControlStats.failed .. " 条"
+      summary = summary .. tr("，失败 ", ", failed ") .. drawnControlStats.failed .. tr(" 条", " curves")
     end
 
     if drawnControlStats.unsupported > 0 then
-      summary = summary .. "\n不支持写入 Pitch Control Curve 的目标: " .. drawnControlStats.unsupported
+      summary = summary
+        .. tr(
+          "\n不支持写入 Pitch Control Curve 的目标: ",
+          "\nTargets that do not support Pitch Control Curve writing: "
+        )
+        .. drawnControlStats.unsupported
     end
   end
 
   if options.flattenPitchDelta then
     summary = summary
-      .. "\npitchDelta: 删除 "
+      .. tr("\npitchDelta: 删除 ", "\npitchDelta: removed ")
       .. pitchStats.removed
-      .. " 点，写入 "
+      .. tr(" 点，写入 ", " points, wrote ")
       .. pitchStats.created
-      .. " 个 0 点，更新 "
+      .. tr(" 个 0 点，更新 ", " zero points, updated ")
       .. pitchStats.updated
-      .. " 点"
+      .. tr(" 点", " points")
 
     if pitchStats.unavailable > 0 then
-      summary = summary .. "\n不可用 pitchDelta 目标: " .. pitchStats.unavailable
+      summary = summary
+        .. tr("\n不可用 pitchDelta 目标: ", "\nUnavailable pitchDelta targets: ")
+        .. pitchStats.unavailable
     end
   end
 
   if options.clearPitchControls then
-    summary = summary .. "\n原有 Studio 2 音高控制: 移除 " .. removedControlStats.removed .. " 个对象"
+    summary = summary
+      .. tr("\n原有 Studio 2 音高控制: 移除 ", "\nExisting Studio 2 pitch controls: removed ")
+      .. removedControlStats.removed
+      .. tr(" 个对象", " objects")
     if removedControlStats.unsupported > 0 then
-      summary = summary .. "\n不支持音高控制 API 的目标: " .. removedControlStats.unsupported
+      summary = summary
+        .. tr("\n不支持音高控制 API 的目标: ", "\nTargets that do not support pitch control APIs: ")
+        .. removedControlStats.unsupported
     end
   end
 
   summary = summary
-    .. "\n\n提示: 本脚本修改音符组目标。如果目标被多个引用复用，其他引用也会同步变化。"
+    .. tr(
+      "\n\n提示: 本脚本修改音符组目标。如果目标被多个引用复用，其他引用也会同步变化。",
+      "\n\nNote: This script edits note group targets. "
+        .. "If a target is reused by multiple references, those references will change as well."
+    )
 
   return summary
 end
@@ -707,7 +746,10 @@ local function getSelectionStatus()
   local selectedNotes = getSortedSelectedNotes(selection)
   local selectedGroups = getSelectedGroups(editor)
 
-  return "选中音符: " .. #selectedNotes .. " | 选中音符组: " .. #selectedGroups
+  return tr("选中音符: ", "Selected notes: ")
+    .. #selectedNotes
+    .. tr(" | 选中音符组: ", " | selected note groups: ")
+    .. #selectedGroups
 end
 
 local function updateStatus()
@@ -749,14 +791,26 @@ local function runPanel()
   local selectedGroups = getSelectedGroups(editor)
 
   if #selectedNotes == 0 and #selectedGroups == 0 then
-    showMessage("提示", "请先在钢琴窗选中音符，或在轨道中选中音符组。")
+    showMessage(
+      tr("提示", "Notice"),
+      tr(
+        "请先在钢琴窗选中音符，或在轨道中选中音符组。",
+        "Select notes in the piano roll, or select note groups in the arrangement first."
+      )
+    )
     isRunning = false
     return
   end
 
   local currentGroup = editor:getCurrentGroup()
   if #selectedNotes > 0 and currentGroup == nil then
-    showMessage("错误", "检测到选中音符，但未检测到当前音符组。")
+    showMessage(
+      tr("错误", "Error"),
+      tr(
+        "检测到选中音符，但未检测到当前音符组。",
+        "Selected notes were detected, but no current note group was found."
+      )
+    )
     isRunning = false
     return
   end
@@ -770,14 +824,17 @@ local function runPanel()
   }
 
   if not options.drawFlatPitchControls and not options.flattenPitchDelta and not options.clearPitchControls then
-    showMessage("提示", "没有启用任何处理项。")
+    showMessage(tr("提示", "Notice"), tr("没有启用任何处理项。", "No processing option is enabled."))
     isRunning = false
     return
   end
 
   local operations = buildOperations(options.scope, currentGroup, selectedNotes, selectedGroups)
   if #operations == 0 then
-    showMessage("提示", "没有找到可处理的有效范围。")
+    showMessage(
+      tr("提示", "Notice"),
+      tr("没有找到可处理的有效范围。", "No valid processable range was found.")
+    )
     isRunning = false
     return
   end
@@ -832,7 +889,7 @@ local function runPanel()
     end
   end
 
-  showMessage("完成", buildSummary(operations, pitchStats, controlStats, drawnControlStats, options))
+  showMessage(tr("完成", "Done"), buildSummary(operations, pitchStats, controlStats, drawnControlStats, options))
   updateStatus()
   isRunning = false
 end
@@ -843,6 +900,7 @@ local function initializePanel()
   end
 
   initialized = true
+  languageValue = createWidgetValue(0)
   scopeValue = createWidgetValue(0)
   drawFlatPitchControlsValue = createWidgetValue(true)
   flattenPitchDeltaValue = createWidgetValue(true)
@@ -860,6 +918,14 @@ local function initializePanel()
     updateStatus()
   end)
 
+  setValueChangeCallback(languageValue, function()
+    updateStatus()
+    safeCall(function()
+      SV:refreshSidePanel()
+      return true
+    end)
+  end)
+
   updateStatus()
 end
 
@@ -871,7 +937,22 @@ function getSidePanelSectionState()
     rows = {
       {
         type = "Label",
-        text = "Selection",
+        text = tr("语言 / Language", "Language / 语言"),
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = { "中文", "English" },
+            value = languageValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = tr("选择", "Selection"),
       },
       {
         type = "Container",
@@ -885,14 +966,19 @@ function getSidePanelSectionState()
       },
       {
         type = "Label",
-        text = "Scope",
+        text = tr("处理范围", "Scope"),
       },
       {
         type = "Container",
         columns = {
           {
             type = "ComboBox",
-            choices = { "自动：优先音符", "选中音符", "选中音符组", "选中音符 + 音符组" },
+            choices = {
+              tr("自动：优先音符", "Auto: prefer notes"),
+              tr("选中音符", "Selected notes"),
+              tr("选中音符组", "Selected note groups"),
+              tr("选中音符 + 音符组", "Selected notes + note groups"),
+            },
             value = scopeValue,
             width = 1.0,
           },
@@ -903,7 +989,7 @@ function getSidePanelSectionState()
         columns = {
           {
             type = "CheckBox",
-            text = "绘制水平 Studio 2 Pitch Control Curve",
+            text = tr("绘制水平 Studio 2 Pitch Control Curve", "Draw horizontal Studio 2 Pitch Control Curve"),
             value = drawFlatPitchControlsValue,
             width = 1.0,
           },
@@ -914,7 +1000,7 @@ function getSidePanelSectionState()
         columns = {
           {
             type = "CheckBox",
-            text = "同时清零 pitchDelta 曲线",
+            text = tr("同时清零 pitchDelta 曲线", "Also reset the pitchDelta curve"),
             value = flattenPitchDeltaValue,
             width = 1.0,
           },
@@ -925,7 +1011,10 @@ function getSidePanelSectionState()
         columns = {
           {
             type = "CheckBox",
-            text = "先移除范围内原有 Studio 2 音高控制",
+            text = tr(
+              "先移除范围内原有 Studio 2 音高控制",
+              "First remove existing Studio 2 pitch controls in range"
+            ),
             value = clearPitchControlsValue,
             width = 1.0,
           },
@@ -936,7 +1025,7 @@ function getSidePanelSectionState()
         columns = {
           {
             type = "CheckBox",
-            text = "保护选区外相邻 pitchDelta 曲线",
+            text = tr("保护选区外相邻 pitchDelta 曲线", "Protect adjacent pitchDelta curve outside selection"),
             value = protectOutsideValue,
             width = 1.0,
           },
@@ -947,13 +1036,13 @@ function getSidePanelSectionState()
         columns = {
           {
             type = "Button",
-            text = "Refresh",
+            text = tr("刷新", "Refresh"),
             value = refreshButtonValue,
             width = 0.35,
           },
           {
             type = "Button",
-            text = "Run",
+            text = tr("运行", "Run"),
             value = runButtonValue,
             width = 0.65,
           },

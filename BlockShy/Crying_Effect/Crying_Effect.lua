@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Crying Effect",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 7,
+    versionNumber = 8,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -13,15 +13,16 @@ local WRITE_OVERWRITE_RANGES = 0
 local WRITE_REBUILD_ENABLED = 2
 
 local PARAM_DEFS = {
-  vibratoEnv = { label = "颤音包络", defaultMin = 0.0, defaultMax = 2.0 },
-  breathiness = { label = "气声", defaultMin = -1.0, defaultMax = 1.0 },
-  tension = { label = "张力", defaultMin = -1.0, defaultMax = 1.0 },
-  pitchDelta = { label = "音高偏移", defaultMin = -1200.0, defaultMax = 1200.0 },
+  vibratoEnv = { label = "颤音包络", labelEn = "Vibrato envelope", defaultMin = 0.0, defaultMax = 2.0 },
+  breathiness = { label = "气声", labelEn = "Breathiness", defaultMin = -1.0, defaultMax = 1.0 },
+  tension = { label = "张力", labelEn = "Tension", defaultMin = -1.0, defaultMax = 1.0 },
+  pitchDelta = { label = "音高偏移", labelEn = "Pitch offset", defaultMin = -1200.0, defaultMax = 1200.0 },
 }
 
 local CRY_PRESETS = {
   {
     label = "轻微哽咽",
+    labelEn = "Light sob",
     intensityScale = 0.75,
     attackPercent = 16,
     peakPercent = 48,
@@ -43,6 +44,7 @@ local CRY_PRESETS = {
   },
   {
     label = "自然哭腔（推荐）",
+    labelEn = "Natural cry (Recommended)",
     intensityScale = 1.0,
     attackPercent = 12,
     peakPercent = 46,
@@ -64,6 +66,7 @@ local CRY_PRESETS = {
   },
   {
     label = "明显哭腔",
+    labelEn = "Obvious cry",
     intensityScale = 1.15,
     attackPercent = 10,
     peakPercent = 42,
@@ -85,6 +88,7 @@ local CRY_PRESETS = {
   },
   {
     label = "强烈哭腔",
+    labelEn = "Strong cry",
     intensityScale = 1.3,
     attackPercent = 8,
     peakPercent = 38,
@@ -106,6 +110,7 @@ local CRY_PRESETS = {
   },
   {
     label = "尾音哽咽",
+    labelEn = "Tail sob",
     intensityScale = 1.05,
     attackPercent = 22,
     peakPercent = 66,
@@ -128,6 +133,7 @@ local CRY_PRESETS = {
 }
 
 local CUSTOM_PRESET_INDEX = #CRY_PRESETS
+local languageValue = nil
 
 local function safeCall(fn)
   local ok, result = pcall(fn)
@@ -135,6 +141,41 @@ local function safeCall(fn)
     return result
   end
   return nil
+end
+
+local function isEnglish()
+  if languageValue == nil then
+    return false
+  end
+
+  return safeCall(function()
+    return languageValue:getValue()
+  end) == 1
+end
+
+local function tr(zh, en)
+  if isEnglish() then
+    return en
+  end
+
+  return zh
+end
+
+local function getParamLabel(typeName)
+  local definition = PARAM_DEFS[typeName]
+  if definition == nil then
+    return typeName
+  end
+
+  return tr(definition.label, definition.labelEn or definition.label)
+end
+
+local function getPresetLabel(preset)
+  if preset == nil then
+    return tr("自定义", "Custom")
+  end
+
+  return tr(preset.label, preset.labelEn or preset.label)
 end
 
 local function clamp(value, minValue, maxValue)
@@ -155,10 +196,10 @@ local function buildPresetChoices()
   local choices = {}
 
   for _, preset in ipairs(CRY_PRESETS) do
-    table.insert(choices, preset.label)
+    table.insert(choices, getPresetLabel(preset))
   end
 
-  table.insert(choices, "自定义（使用下方高级参数）")
+  table.insert(choices, tr("自定义（使用下方高级参数）", "Custom (use advanced controls below)"))
   return choices
 end
 
@@ -345,7 +386,7 @@ local function createTask(typeName, param)
   local minValue, maxValue = getParamRange(param, typeName)
   return {
     typeName = typeName,
-    label = PARAM_DEFS[typeName].label,
+    label = getParamLabel(typeName),
     param = param,
     minValue = minValue,
     maxValue = maxValue,
@@ -371,7 +412,7 @@ local function getEnabledTasks(groupTarget, options)
     if param then
       tasks[typeName] = createTask(typeName, param)
     else
-      table.insert(skipped, PARAM_DEFS[typeName].label .. " (" .. typeName .. ")")
+      table.insert(skipped, getParamLabel(typeName) .. " (" .. typeName .. ")")
     end
   end
 
@@ -408,7 +449,7 @@ local function resolveOptions(answers)
   local preset = CRY_PRESETS[presetIndex + 1]
 
   local options = {
-    presetLabel = "自定义",
+    presetLabel = tr("自定义", "Custom"),
     intensity = intensity,
     writeMode = answers.writeMode,
     addVibrato = answers.addVibrato,
@@ -437,7 +478,7 @@ local function resolveOptions(answers)
   }
 
   if presetIndex ~= CUSTOM_PRESET_INDEX and preset then
-    options.presetLabel = preset.label
+    options.presetLabel = getPresetLabel(preset)
     options.intensity = intensity * preset.intensityScale
     options.attackPercent = preset.attackPercent
     options.peakPercent = preset.peakPercent
@@ -648,33 +689,34 @@ local function buildSummary(noteCount, taskCount, processedPitchDrops, tasks, sk
     totalCollisions = totalCollisions + task.collisions
   end
 
-  local summary = "哭腔参数已生成。\n"
-    .. "预设: "
+  local summary = tr("哭腔参数已生成。\n", "Crying effect parameters generated.\n")
+    .. tr("预设: ", "Preset: ")
     .. options.presetLabel
-    .. "\n"
-    .. "处理音符: "
+    .. tr("\n处理音符: ", "\nProcessed notes: ")
     .. noteCount
-    .. "\n启用参数: "
+    .. tr("\n启用参数: ", "\nEnabled parameters: ")
     .. taskCount
-    .. "\n生成点: "
+    .. tr("\n生成点: ", "\nGenerated points: ")
     .. totalGenerated
-    .. "，新建 "
+    .. tr("，新建 ", ", created ")
     .. totalCreated
-    .. "，更新 "
+    .. tr("，更新 ", ", updated ")
     .. totalUpdated
-    .. "\n清理旧点: "
+    .. tr("\n清理旧点: ", "\nRemoved old points: ")
     .. totalRemoved
 
   if processedPitchDrops > 0 then
-    summary = summary .. "\n尾部下坠音符: " .. processedPitchDrops
+    summary = summary .. tr("\n尾部下坠音符: ", "\nTail-drop notes: ") .. processedPitchDrops
   end
 
   if totalCollisions > 0 then
-    summary = summary .. "\n合并同位置点: " .. totalCollisions
+    summary = summary .. tr("\n合并同位置点: ", "\nMerged same-position points: ") .. totalCollisions
   end
 
   if #skipped > 0 then
-    summary = summary .. "\n跳过不可用参数: " .. table.concat(skipped, ", ")
+    summary = summary
+      .. tr("\n跳过不可用参数: ", "\nSkipped unavailable parameters: ")
+      .. table.concat(skipped, ", ")
   end
 
   return summary
@@ -766,7 +808,7 @@ local function updateStatus()
   local editor = SV:getMainEditor()
   local selection = editor:getSelection()
   local selectedNotes = getSortedSelectedNotes(selection)
-  setWidgetValue(statusValue, "选中音符: " .. #selectedNotes)
+  setWidgetValue(statusValue, tr("选中音符: ", "Selected notes: ") .. #selectedNotes)
 end
 
 local function buildPanelAnswers()
@@ -802,21 +844,33 @@ local function runPanel()
   local selectedNotes = getSortedSelectedNotes(selection)
 
   if #selectedNotes == 0 then
-    showMessage("提示", "请先在钢琴窗中选中一个或多个音符。")
+    showMessage(
+      tr("提示", "Notice"),
+      tr("请先在钢琴窗中选中一个或多个音符。", "Select one or more notes in the piano roll first.")
+    )
     isRunning = false
     return
   end
 
   local currentGroup = editor:getCurrentGroup()
   if currentGroup == nil then
-    showMessage("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    showMessage(
+      tr("错误", "Error"),
+      tr(
+        "未检测到当前音符组，请先选中一个轨道或音符组。",
+        "No current note group detected. Select a track or note group first."
+      )
+    )
     isRunning = false
     return
   end
 
   local groupTarget = currentGroup:getTarget()
   if groupTarget == nil then
-    showMessage("错误", "未检测到当前音符组目标。")
+    showMessage(
+      tr("错误", "Error"),
+      tr("未检测到当前音符组目标。", "No current note group target detected.")
+    )
     isRunning = false
     return
   end
@@ -827,7 +881,13 @@ local function runPanel()
   local taskCount = countTasks(tasks)
 
   if taskCount == 0 then
-    showMessage("提示", "没有可用或启用的参数，未写入任何点。")
+    showMessage(
+      tr("提示", "Notice"),
+      tr(
+        "没有可用或启用的参数，未写入任何点。",
+        "No available or enabled parameter; no points were written."
+      )
+    )
     isRunning = false
     return
   end
@@ -849,10 +909,14 @@ local function runPanel()
     return currentGroup:isMain()
   end) == false then
     summary = summary
-      .. "\n\n注意: 参数写入当前音符组目标；如果该目标被多个引用复用，其他引用也会同步变化。"
+      .. tr(
+        "\n\n注意: 参数写入当前音符组目标；如果该目标被多个引用复用，其他引用也会同步变化。",
+        "\n\nWarning: Parameters are written to the current note group target. "
+          .. "If the target is reused by multiple references, those references will change as well."
+      )
   end
 
-  showMessage("完成", summary)
+  showMessage(tr("完成", "Done"), summary)
   updateStatus()
   isRunning = false
 end
@@ -863,6 +927,7 @@ local function initializePanel()
   end
 
   initialized = true
+  languageValue = createWidgetValue(0)
   presetValue = createWidgetValue(1)
   intensityValue = createWidgetValue(1.0)
   writeModeValue = createWidgetValue(0)
@@ -889,6 +954,14 @@ local function initializePanel()
 
   setValueChangeCallback(refreshButtonValue, function()
     updateStatus()
+  end)
+
+  setValueChangeCallback(languageValue, function()
+    updateStatus()
+    safeCall(function()
+      SV:refreshSidePanel()
+      return true
+    end)
   end)
 
   updateStatus()
@@ -934,7 +1007,22 @@ function getSidePanelSectionState()
     rows = {
       {
         type = "Label",
-        text = "Selection",
+        text = tr("语言 / Language", "Language / 语言"),
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = { "中文", "English" },
+            value = languageValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = tr("选择", "Selection"),
       },
       {
         type = "Container",
@@ -948,7 +1036,7 @@ function getSidePanelSectionState()
       },
       {
         type = "Label",
-        text = "Preset",
+        text = tr("预设", "Preset"),
       },
       {
         type = "Container",
@@ -961,51 +1049,54 @@ function getSidePanelSectionState()
           },
         },
       },
-      sliderRow("预设强度倍率", intensityValue, "%1.1f", 0.5, 1.6, 0.1),
+      sliderRow(tr("预设强度倍率", "Preset strength"), intensityValue, "%1.1f", 0.5, 1.6, 0.1),
       {
         type = "Container",
         columns = {
           {
             type = "ComboBox",
             choices = {
-              "覆盖选中音符范围",
-              "仅追加/更新同位置点",
-              "清空已启用参数后重建",
+              tr("覆盖选中音符范围", "Overwrite selected note ranges"),
+              tr("仅追加/更新同位置点", "Append/update only"),
+              tr("清空已启用参数后重建", "Clear enabled parameters and rebuild"),
             },
             value = writeModeValue,
             width = 1.0,
           },
         },
       },
-      checkboxRow("添加颤音包络", addVibratoValue),
-      checkboxRow("添加气声", addBreathValue),
-      checkboxRow("添加张力", addTensionValue),
-      checkboxRow("添加音高哭腔/尾部下坠", addPitchDropValue),
+      checkboxRow(tr("添加颤音包络", "Add vibrato envelope"), addVibratoValue),
+      checkboxRow(tr("添加气声", "Add breathiness"), addBreathValue),
+      checkboxRow(tr("添加张力", "Add tension"), addTensionValue),
+      checkboxRow(tr("添加音高哭腔/尾部下坠", "Add pitch cry / tail drop"), addPitchDropValue),
       {
         type = "Label",
-        text = "Custom Envelope",
+        text = tr("自定义包络", "Custom Envelope"),
       },
-      sliderRow("起势位置 (%)", attackPercentValue, "%1.0f", 0, 40, 1),
-      sliderRow("峰值位置 (%)", peakPercentValue, "%1.0f", 20, 80, 1),
-      sliderRow("回落位置 (%)", releasePercentValue, "%1.0f", 60, 100, 1),
-      sliderRow("张力随机量", randomAmountValue, "%1.2f", 0, 0.4, 0.01),
-      checkboxRow("固定随机结果", fixedRandomValue),
-      sliderRow("下坠开始位置 (%)", dropStartPercentValue, "%1.0f", 40, 95, 1),
-      sliderRow("下坠深度 (cents)", dropDepthValue, "%1.0f", 20, 400, 5),
-      checkboxRow("仅对每段选区最后一个音符添加下坠", dropLastNotesOnlyValue),
-      checkboxRow("尾后恢复音高偏移", restorePitchValue),
+      sliderRow(tr("起势位置 (%)", "Attack position (%)"), attackPercentValue, "%1.0f", 0, 40, 1),
+      sliderRow(tr("峰值位置 (%)", "Peak position (%)"), peakPercentValue, "%1.0f", 20, 80, 1),
+      sliderRow(tr("回落位置 (%)", "Release position (%)"), releasePercentValue, "%1.0f", 60, 100, 1),
+      sliderRow(tr("张力随机量", "Tension randomness"), randomAmountValue, "%1.2f", 0, 0.4, 0.01),
+      checkboxRow(tr("固定随机结果", "Fixed random output"), fixedRandomValue),
+      sliderRow(tr("下坠开始位置 (%)", "Drop start position (%)"), dropStartPercentValue, "%1.0f", 40, 95, 1),
+      sliderRow(tr("下坠深度 (cents)", "Drop depth (cents)"), dropDepthValue, "%1.0f", 20, 400, 5),
+      checkboxRow(
+        tr("仅对每段选区最后一个音符添加下坠", "Apply drop only to the last note in each range"),
+        dropLastNotesOnlyValue
+      ),
+      checkboxRow(tr("尾后恢复音高偏移", "Restore pitch after tail"), restorePitchValue),
       {
         type = "Container",
         columns = {
           {
             type = "Button",
-            text = "Refresh",
+            text = tr("刷新", "Refresh"),
             value = refreshButtonValue,
             width = 0.35,
           },
           {
             type = "Button",
-            text = "Run",
+            text = tr("运行", "Run"),
             value = runButtonValue,
             width = 0.65,
           },

@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Pitch to Parameter",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 6,
+    versionNumber = 7,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -403,6 +403,7 @@ local simplifyPercentValue = nil
 local centerPitchValue = nil
 local strengthValue = nil
 local directionValue = nil
+local languageValue = nil
 local runButtonValue = nil
 local refreshButtonValue = nil
 local statusValue = nil
@@ -447,6 +448,18 @@ local function getWidgetValue(widgetValue, fallback)
   return value
 end
 
+local function isEnglish()
+  return getWidgetValue(languageValue, 0) == 1
+end
+
+local function tr(zh, en)
+  if isEnglish() then
+    return en
+  end
+
+  return zh
+end
+
 local function setWidgetValue(widgetValue, value)
   if widgetValue == nil then
     return
@@ -474,7 +487,7 @@ local function buildStaticParamLabels()
   for _, candidate in ipairs(TARGET_PARAM_CANDIDATES) do
     table.insert(labels, candidate.label)
   end
-  table.insert(labels, "自定义参数名 (Custom)")
+  table.insert(labels, tr("自定义参数名 (Custom)", "Custom parameter name (自定义)"))
   return labels
 end
 
@@ -501,7 +514,13 @@ local function updateStatus()
     setWidgetValue(centerPitchValue, centerPitch)
   end
 
-  setWidgetValue(statusValue, "选中音符: " .. #selectedNotes .. " | 建议中心音高: " .. centerPitch)
+  setWidgetValue(
+    statusValue,
+    tr("选中音符: ", "Selected notes: ")
+      .. #selectedNotes
+      .. tr(" | 建议中心音高: ", " | suggested center pitch: ")
+      .. centerPitch
+  )
 end
 
 local function resolveTargetParamName()
@@ -535,42 +554,66 @@ local function runPanel()
   local selectedNotes = getSortedSelectedNotes(selection)
 
   if #selectedNotes == 0 then
-    showMessage("提示", "请先选中需要处理的音符。")
+    showMessage(
+      tr("提示", "Notice"),
+      tr("请先选中需要处理的音符。", "Select the notes to process first.")
+    )
     isRunning = false
     return
   end
 
   local currentGroup = editor:getCurrentGroup()
   if currentGroup == nil then
-    showMessage("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    showMessage(
+      tr("错误", "Error"),
+      tr(
+        "未检测到当前音符组，请先选中一个轨道或音符组。",
+        "No current note group detected. Select a track or note group first."
+      )
+    )
     isRunning = false
     return
   end
 
   local groupTarget = currentGroup:getTarget()
   if groupTarget == nil then
-    showMessage("错误", "未检测到当前音符组目标。")
+    showMessage(
+      tr("错误", "Error"),
+      tr("未检测到当前音符组目标。", "No current note group target detected.")
+    )
     isRunning = false
     return
   end
 
   local pitchDelta = getParameterSafe(groupTarget, "pitchDelta")
   if pitchDelta == nil then
-    showMessage("错误", "当前音符组没有可用的 pitchDelta 参数。")
+    showMessage(
+      tr("错误", "Error"),
+      tr(
+        "当前音符组没有可用的 pitchDelta 参数。",
+        "The current note group has no available pitchDelta parameter."
+      )
+    )
     isRunning = false
     return
   end
 
   local targetParamName = resolveTargetParamName()
   if targetParamName == nil then
-    showMessage("错误", "选择自定义参数时必须填写参数名。")
+    showMessage(
+      tr("错误", "Error"),
+      tr("选择自定义参数时必须填写参数名。", "A parameter name is required when Custom is selected.")
+    )
     isRunning = false
     return
   end
 
   local targetParam = getParameterSafe(groupTarget, targetParamName)
   if targetParam == nil then
-    showMessage("错误", "目标参数不可用: " .. targetParamName)
+    showMessage(
+      tr("错误", "Error"),
+      tr("目标参数不可用: ", "Target parameter is unavailable: ") .. targetParamName
+    )
     isRunning = false
     return
   end
@@ -604,15 +647,19 @@ local function runPanel()
 
   local points, pointStats = buildGeneratedPoints(selectedNotes, context)
   if #points == 0 then
-    showMessage("提示", "没有生成任何参数点。")
+    showMessage(tr("提示", "Notice"), tr("没有生成任何参数点。", "No parameter points were generated."))
     isRunning = false
     return
   end
 
   if context.sourceMode == SOURCE_MODE_COMPUTED and pointStats.computedFallbacks == pointStats.sampledPoints then
     showMessage(
-      "提示",
-      "计算后音高尚未准备好，脚本未写入参数。请等待 Synthesizer V 完成音高计算后重试，或改用轻量音高来源。"
+      tr("提示", "Notice"),
+      tr(
+        "计算后音高尚未准备好，脚本未写入参数。请等待 Synthesizer V 完成音高计算后重试，或改用轻量音高来源。",
+        "Computed pitch is not ready, so no parameters were written. "
+          .. "Wait for Synthesizer V to finish pitch calculation, or use a lightweight pitch source."
+      )
     )
     isRunning = false
     return
@@ -641,45 +688,45 @@ local function runPanel()
     targetDisplayName = targetDefinition.displayName .. " (" .. targetParamName .. ")"
   end
 
-  local summary = "映射完成。\n"
-    .. "目标参数: "
+  local summary = tr("映射完成。\n", "Mapping complete.\n")
+    .. tr("目标参数: ", "Target parameter: ")
     .. targetDisplayName
-    .. "\n"
-    .. "选中音符: "
+    .. tr("\n选中音符: ", "\nSelected notes: ")
     .. #selectedNotes
-    .. "\n"
-    .. "采样点: "
+    .. tr("\n采样点: ", "\nSampled points: ")
     .. pointStats.sampledPoints
-    .. "\n"
-    .. "写入点: "
+    .. tr("\n写入点: ", "\nWritten points: ")
     .. #points
-    .. "，新建 "
+    .. tr("，新建 ", ", created ")
     .. createdPoints
-    .. "，更新 "
+    .. tr("，更新 ", ", updated ")
     .. updatedPoints
-    .. "\n"
-    .. "清理旧点: "
+    .. tr("\n清理旧点: ", "\nRemoved old points: ")
     .. removedPoints
 
   if pointStats.collisions > 0 then
-    summary = summary .. "\n合并同位置点: " .. pointStats.collisions
+    summary = summary .. tr("\n合并同位置点: ", "\nMerged same-position points: ") .. pointStats.collisions
   end
 
   if pointStats.computedFallbacks > 0 then
     summary = summary
-      .. "\n计算后音高缺失采样: "
+      .. tr("\n计算后音高缺失采样: ", "\nComputed-pitch fallback samples: ")
       .. pointStats.computedFallbacks
-      .. "，已回退到轻量音高。"
+      .. tr("，已回退到轻量音高。", "; fell back to lightweight pitch.")
   end
 
   if safeCall(function()
     return currentGroup:isMain()
   end) == false then
     summary = summary
-      .. "\n\n注意: 参数写入当前音符组目标；如果该目标被多个引用复用，其他引用也会同步变化。"
+      .. tr(
+        "\n\n注意: 参数写入当前音符组目标；如果该目标被多个引用复用，其他引用也会同步变化。",
+        "\n\nWarning: Parameters are written to the current note group target. "
+          .. "If the target is reused by multiple references, those references will change as well."
+      )
   end
 
-  showMessage("完成", summary)
+  showMessage(tr("完成", "Done"), summary)
   updateStatus()
   isRunning = false
 end
@@ -690,6 +737,7 @@ local function initializePanel()
   end
 
   initialized = true
+  languageValue = createWidgetValue(0)
   targetParamValue = createWidgetValue(0)
   customParamValue = createWidgetValue("")
   sourceModeValue = createWidgetValue(0)
@@ -710,6 +758,14 @@ local function initializePanel()
 
   setValueChangeCallback(refreshButtonValue, function()
     updateStatus()
+  end)
+
+  setValueChangeCallback(languageValue, function()
+    updateStatus()
+    safeCall(function()
+      SV:refreshSidePanel()
+      return true
+    end)
   end)
 
   updateStatus()
@@ -755,7 +811,22 @@ function getSidePanelSectionState()
     rows = {
       {
         type = "Label",
-        text = "Selection",
+        text = tr("语言 / Language", "Language / 语言"),
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = { "中文", "English" },
+            value = languageValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = tr("选择", "Selection"),
       },
       {
         type = "Container",
@@ -769,7 +840,7 @@ function getSidePanelSectionState()
       },
       {
         type = "Label",
-        text = "Target",
+        text = tr("目标参数", "Target"),
       },
       comboRow(buildStaticParamLabels(), targetParamValue),
       {
@@ -784,40 +855,52 @@ function getSidePanelSectionState()
       },
       {
         type = "Label",
-        text = "Source",
+        text = tr("音高来源", "Source"),
       },
       comboRow({
-        "轻量：音符音高 + pitchDelta",
-        "仅跟随 pitchDelta",
-        "计算后音高 (Studio 2)",
+        tr("轻量：音符音高 + pitchDelta", "Lightweight: note pitch + pitchDelta"),
+        tr("仅跟随 pitchDelta", "PitchDelta only"),
+        tr("计算后音高 (Studio 2)", "Computed pitch (Studio 2)"),
       }, sourceModeValue),
       comboRow({
-        "智能精简",
-        "保留全部采样点",
-        "强制线性",
+        tr("智能精简", "Smart simplify"),
+        tr("保留全部采样点", "Keep all samples"),
+        tr("强制线性", "Force linear"),
       }, densityModeValue),
       comboRow({
-        "覆盖选中音符范围",
-        "仅追加/更新同位置点",
-        "清空目标参数后重建",
+        tr("覆盖选中音符范围", "Overwrite selected note ranges"),
+        tr("仅追加/更新同位置点", "Append/update only"),
+        tr("清空目标参数后重建", "Clear target parameter and rebuild"),
       }, writeModeValue),
-      comboRow({ "1/8 拍", "1/16 拍", "1/32 拍", "1/64 拍" }, sampleIntervalValue),
-      sliderRow("精简阈值 (% 参数范围)", simplifyPercentValue, "%1.2f", 0.0, 5.0, 0.05),
-      sliderRow("参考中心音高", centerPitchValue, "%1.0f", 36, 96, 1),
-      sliderRow("映射强度", strengthValue, "%1.2f", 0.01, 2.0, 0.01),
-      comboRow({ "正向", "反向" }, directionValue),
+      comboRow({
+        tr("1/8 拍", "1/8 beat"),
+        tr("1/16 拍", "1/16 beat"),
+        tr("1/32 拍", "1/32 beat"),
+        tr("1/64 拍", "1/64 beat"),
+      }, sampleIntervalValue),
+      sliderRow(
+        tr("精简阈值 (% 参数范围)", "Simplify threshold (% parameter range)"),
+        simplifyPercentValue,
+        "%1.2f",
+        0.0,
+        5.0,
+        0.05
+      ),
+      sliderRow(tr("参考中心音高", "Reference center pitch"), centerPitchValue, "%1.0f", 36, 96, 1),
+      sliderRow(tr("映射强度", "Mapping strength"), strengthValue, "%1.2f", 0.01, 2.0, 0.01),
+      comboRow({ tr("正向", "Normal"), tr("反向", "Inverted") }, directionValue),
       {
         type = "Container",
         columns = {
           {
             type = "Button",
-            text = "Refresh",
+            text = tr("刷新", "Refresh"),
             value = refreshButtonValue,
             width = 0.35,
           },
           {
             type = "Button",
-            text = "Run",
+            text = tr("运行", "Run"),
             value = runButtonValue,
             width = 0.65,
           },

@@ -3,7 +3,7 @@ function getClientInfo()
     name = "BPM Rescaler",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 7,
+    versionNumber = 8,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -318,6 +318,7 @@ local originalBpmValue = nil
 local anchorModeValue = nil
 local processAutomationValue = nil
 local processPitchControlsValue = nil
+local languageValue = nil
 local runButtonValue = nil
 local detectButtonValue = nil
 local statusValue = nil
@@ -362,6 +363,18 @@ local function getWidgetValue(widgetValue, fallback)
   return value
 end
 
+local function isEnglish()
+  return getWidgetValue(languageValue, 0) == 1
+end
+
+local function tr(zh, en)
+  if isEnglish() then
+    return en
+  end
+
+  return zh
+end
+
 local function setWidgetValue(widgetValue, value)
   if widgetValue == nil then
     return
@@ -391,7 +404,7 @@ local function detectCurrentBpm()
   local currentGroup = editor:getCurrentGroup()
 
   if currentGroup == nil then
-    setWidgetValue(statusValue, "未检测到当前音符组。")
+    setWidgetValue(statusValue, tr("未检测到当前音符组。", "No current note group detected."))
     return nil, 0
   end
 
@@ -411,9 +424,9 @@ local function refreshDetectedBpm()
   setWidgetValue(currentBpmValue, formatNumber(detectedBPM))
   setWidgetValue(originalBpmValue, formatNumber(detectedBPM / 2))
 
-  local status = "检测 BPM: " .. formatNumber(detectedBPM)
+  local status = tr("检测 BPM: ", "Detected BPM: ") .. formatNumber(detectedBPM)
   if tempoMarkCount > 1 then
-    status = status .. " | 多个 BPM 标记"
+    status = status .. tr(" | 多个 BPM 标记", " | multiple tempo marks")
   end
 
   setWidgetValue(statusValue, status)
@@ -432,7 +445,13 @@ local function runPanel()
   local currentGroup = editor:getCurrentGroup()
 
   if currentGroup == nil then
-    showMessage("错误", "未检测到当前音符组，请先选中一个轨道或音符组。")
+    showMessage(
+      tr("错误", "Error"),
+      tr(
+        "未检测到当前音符组，请先选中一个轨道或音符组。",
+        "No current note group detected. Select a track or note group first."
+      )
+    )
     isRunning = false
     return
   end
@@ -440,7 +459,13 @@ local function runPanel()
   local groupTarget = currentGroup:getTarget()
 
   if groupTarget == nil then
-    showMessage("错误", "未检测到选中的轨道或音符组，请先选中一个轨道。")
+    showMessage(
+      tr("错误", "Error"),
+      tr(
+        "未检测到选中的轨道或音符组，请先选中一个轨道。",
+        "No selected track or note group target detected. Select a track first."
+      )
+    )
     isRunning = false
     return
   end
@@ -452,18 +477,18 @@ local function runPanel()
   local originalBPM = tonumber(getWidgetValue(originalBpmValue, ""))
 
   if currentBPM == nil or currentBPM <= 0 or originalBPM == nil or originalBPM <= 0 then
-    showMessage("错误", "请输入有效的 BPM 数值。")
+    showMessage(tr("错误", "Error"), tr("请输入有效的 BPM 数值。", "Enter valid BPM values."))
     isRunning = false
     return
   end
 
   local ratio = currentBPM / originalBPM
   local anchor = 0
-  local anchorLabel = "音符组内部 0 位置"
+  local anchorLabel = tr("音符组内部 0 位置", "Note group local 0")
 
   if getWidgetValue(anchorModeValue, 0) == 1 then
     anchor = getFirstNoteOnset(groupTarget)
-    anchorLabel = "第一个音符起点"
+    anchorLabel = tr("第一个音符起点", "First note onset")
   end
 
   local noteCount = rescaleNotes(groupTarget, anchor, ratio)
@@ -478,39 +503,46 @@ local function runPanel()
     pitchStats = rescalePitchControls(groupTarget, anchor, ratio)
   end
 
-  local summary = "缩放完成。\n"
-    .. "比例: "
+  local summary = tr("缩放完成。\n", "Rescale complete.\n")
+    .. tr("比例: ", "Ratio: ")
     .. formatNumber(ratio)
     .. " ("
     .. formatNumber(originalBPM)
     .. " -> "
     .. formatNumber(currentBPM)
     .. " BPM)\n"
-    .. "锚点: "
+    .. tr("锚点: ", "Anchor: ")
     .. anchorLabel
     .. "\n"
-    .. "音符: "
+    .. tr("音符: ", "Notes: ")
     .. noteCount
     .. "\n"
-    .. "参数曲线: "
+    .. tr("参数曲线: ", "Automation: ")
     .. automationStats.tracks
-    .. " 条 / "
+    .. tr(" 条 / ", " tracks / ")
     .. automationStats.points
-    .. " 点"
+    .. tr(" 点", " points")
 
   if automationStats.collisions > 0 then
-    summary = summary .. "，合并冲突 " .. automationStats.collisions .. " 点"
+    summary = summary
+      .. tr("，合并冲突 ", ", merged collisions: ")
+      .. automationStats.collisions
+      .. tr(" 点", " points")
   end
 
   summary = summary
-    .. "\n音高控制: "
+    .. tr("\n音高控制: ", "\nPitch controls: ")
     .. pitchStats.objects
-    .. " 个对象 / "
+    .. tr(" 个对象 / ", " objects / ")
     .. pitchStats.curvePoints
-    .. " 个曲线点"
+    .. tr(" 个曲线点", " curve points")
 
   if tempoMarkCount > 1 then
-    summary = summary .. "\n\n提示: 工程中存在多个 BPM 标记，本次按单一比例处理。"
+    summary = summary
+      .. tr(
+        "\n\n提示: 工程中存在多个 BPM 标记，本次按单一比例处理。",
+        "\n\nNote: The project has multiple tempo marks; this run used one global ratio."
+      )
   end
 
   local isMainGroup = safeCall(function()
@@ -519,11 +551,19 @@ local function runPanel()
 
   if isMainGroup == false then
     summary = summary
-      .. "\n\n注意: 当前脚本修改的是音符组目标。如果该目标被多个引用复用，其他引用也会同步变化。"
+      .. tr(
+        "\n\n注意: 当前脚本修改的是音符组目标。如果该目标被多个引用复用，其他引用也会同步变化。",
+        "\n\nWarning: This script edits the note group target. "
+          .. "If the target is reused by multiple references, those references will change as well."
+      )
   end
 
-  showMessage("完成", summary)
-  setWidgetValue(statusValue, "完成缩放，引用位置 BPM: " .. formatNumber(getTempoAt(timeAxis, groupOnset)))
+  showMessage(tr("完成", "Done"), summary)
+  setWidgetValue(
+    statusValue,
+    tr("完成缩放，引用位置 BPM: ", "Rescale complete, reference BPM: ")
+      .. formatNumber(getTempoAt(timeAxis, groupOnset))
+  )
   isRunning = false
 end
 
@@ -538,6 +578,7 @@ local function initializePanel()
   anchorModeValue = createWidgetValue(0)
   processAutomationValue = createWidgetValue(true)
   processPitchControlsValue = createWidgetValue(true)
+  languageValue = createWidgetValue(0)
   runButtonValue = createWidgetValue(false)
   detectButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
@@ -548,6 +589,14 @@ local function initializePanel()
 
   setValueChangeCallback(detectButtonValue, function()
     refreshDetectedBpm()
+  end)
+
+  setValueChangeCallback(languageValue, function()
+    refreshDetectedBpm()
+    safeCall(function()
+      SV:refreshSidePanel()
+      return true
+    end)
   end)
 
   refreshDetectedBpm()
@@ -588,22 +637,37 @@ function getSidePanelSectionState()
     rows = {
       {
         type = "Label",
-        text = "Status",
+        text = tr("语言 / Language", "Language / 语言"),
+      },
+      {
+        type = "Container",
+        columns = {
+          {
+            type = "ComboBox",
+            choices = { "中文", "English" },
+            value = languageValue,
+            width = 1.0,
+          },
+        },
+      },
+      {
+        type = "Label",
+        text = tr("状态", "Status"),
       },
       textBoxRow(statusValue),
       {
         type = "Label",
-        text = "Current BPM",
+        text = tr("当前 BPM", "Current BPM"),
       },
       textBoxRow(currentBpmValue),
       {
         type = "Label",
-        text = "Original BPM",
+        text = tr("原始 BPM", "Original BPM"),
       },
       textBoxRow(originalBpmValue),
       {
         type = "Label",
-        text = "Anchor",
+        text = tr("缩放锚点", "Anchor"),
       },
       {
         type = "Container",
@@ -611,28 +675,31 @@ function getSidePanelSectionState()
           {
             type = "ComboBox",
             choices = {
-              "音符组内部 0 位置",
-              "第一个音符起点",
+              tr("音符组内部 0 位置", "Note group local 0"),
+              tr("第一个音符起点", "First note onset"),
             },
             value = anchorModeValue,
             width = 1.0,
           },
         },
       },
-      checkboxRow("同时缩放参数曲线", processAutomationValue),
-      checkboxRow("同时缩放 Studio 2 音高控制点/曲线", processPitchControlsValue),
+      checkboxRow(tr("同时缩放参数曲线", "Also rescale automation"), processAutomationValue),
+      checkboxRow(
+        tr("同时缩放 Studio 2 音高控制点/曲线", "Also rescale Studio 2 pitch controls"),
+        processPitchControlsValue
+      ),
       {
         type = "Container",
         columns = {
           {
             type = "Button",
-            text = "Detect BPM",
+            text = tr("检测 BPM", "Detect BPM"),
             value = detectButtonValue,
             width = 0.45,
           },
           {
             type = "Button",
-            text = "Run",
+            text = tr("运行", "Run"),
             value = runButtonValue,
             width = 0.55,
           },

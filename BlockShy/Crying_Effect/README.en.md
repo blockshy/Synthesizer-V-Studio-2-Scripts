@@ -45,6 +45,7 @@ It can write:
 
 - Output values are clamped to the official automation range for each parameter.
 - This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
+- The panel includes a Chinese/English language switch and defaults to Chinese.
 - Fixed random output is enabled by default, making repeated runs more reproducible.
 - Presets override the advanced envelope and drop values; the advanced sliders are mainly for the `Custom` preset.
 - Pitch gestures are added relative to the current `pitchDelta` curve instead of forcing it back to zero.
