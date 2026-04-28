@@ -9,12 +9,13 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 - Shows each script's purpose, prerequisites, usage, and managed path.
 - Shows the current selected-note, selected-group, and current-group status.
 - Runs the embedded same-version script source through the `Run` button.
+- Generates the manager index from the `BlockShy` directory with `tools/sync_script_manager.lua`.
 
 ## Managed Scripts
 
 - BPM Rescaler
-- Pitch to Parameter
 - Crying Effect
+- Pitch to Parameter
 
 ## Usage
 
@@ -24,10 +25,27 @@ A Synthesizer V Studio 2 side-panel script manager for browsing and running Bloc
 4. Select `BlockShy Script Manager`.
 5. Pick a script, review its description, then click `Run`.
 
+## Adding Scripts
+
+After adding a script folder, run:
+
+```sh
+lua tools/sync_script_manager.lua
+```
+
+The sync tool scans `BlockShy/*/*.lua`, skips side-panel scripts, reads `getClientInfo()`, `README.zh.md`, and `README.en.md`, then updates the manager's script list and embedded source.
+
+Managed scripts must:
+
+- Live under `BlockShy/Script_Folder/`.
+- Provide `getClientInfo()`.
+- Provide `main()`.
+- Keep `README.zh.md` and `README.en.md` available in the same folder.
+
 ## Notes
 
-- The manager uses an explicit registry and does not scan arbitrary directories.
+- The manager uses a generated registry and does not scan arbitrary directories at Synthesizer V runtime.
 - Managed scripts still keep their original top-menu Scripts entries.
 - Side-panel execution uses embedded script source and does not depend on `loadfile()` or relative script directory paths.
-- If a managed menu script changes behavior, update the manager's embedded source as well.
+- If a managed menu script changes behavior, rerun `lua tools/sync_script_manager.lua`.
 - `SV:finish()` inside loaded menu scripts is ignored in the manager environment so the side-panel script remains active.

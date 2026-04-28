@@ -1,5 +1,7 @@
 *
 !.luacheckrc
 !.stylua.toml
+!tools/
+!tools/**
 !BlockShy/
 !BlockShy/**
