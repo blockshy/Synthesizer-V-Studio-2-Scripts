@@ -21,7 +21,8 @@ local SCRIPT_ENTRIES = {
     sourceKey = "BPM_Rescaler",
     version = "V6",
     requires = "在 Synthesizer V Studio 2 中选中要处理的轨道或音符组。",
-    summary = "用于修复 MIDI/轨道原始 BPM 与当前工程 BPM 不一致导致的音符长度和参数曲线错位问题。脚本会按 `当前 BPM / 原始 BPM` 的比例缩放当前音符组目标内的数据。",
+    summary = "用于修复 MIDI/轨道原始 BPM 与当前工程 BPM 不一致导致的音符长度和参数曲线错位问题。脚本会按 `当"
+      .. "前 BPM / 原始 BPM` 的比例缩放当前音符组目标内的数据。",
     usage = "在 Synthesizer V Studio 2 中选中要处理的轨道或音符组。\
 运行 `BPM Rescaler`。\
 确认“当前工程 BPM”，并输入 MIDI/轨道导入前的“原始 BPM”。\
@@ -34,7 +35,8 @@ local SCRIPT_ENTRIES = {
     sourceKey = "Crying_Effect",
     version = "V6",
     requires = "在钢琴窗中选中一个或多个音符。",
-    summary = "为选中音符生成哭腔风格的表现参数。新版脚本提供可直接使用的哭腔预设，并会按预设写入颤音、气声、张力和音高哭腔曲线。",
+    summary = "为选中音符生成哭腔风格的表现参数。新版脚本提供可直接使用的哭腔预设，并会按预设写入颤音、气声、张力和音高哭腔曲线"
+      .. "。",
     usage = "在钢琴窗中选中一个或多个音符。\
 运行 `Crying Effect`。\
 选择哭腔预设。默认“自然哭腔（推荐）”可以直接使用。\
@@ -45,13 +47,14 @@ local SCRIPT_ENTRIES = {
     folder = "Flatten_Pitch_Curve",
     file = "Flatten_Pitch_Curve.lua",
     sourceKey = "Flatten_Pitch_Curve",
-    version = "V1",
+    version = "V2",
     requires = "在钢琴窗中选中需要抹平音高曲线的音符，或在轨道中选中音符组。",
-    summary = "将选中音符或选中音符组范围内的音高曲线抹平。脚本会把 `pitchDelta` 参数曲线写回 0 cents，并可选移除范围内的 Synthesizer V Studio 2 音高控制点/曲线。",
+    summary = "将选中音符或选中音符组范围内的音高曲线抹平。脚本会为每个目标音符绘制一条完全水平的 Synthesizer V "
+      .. "Studio 2 Pitch Control Curve，使音高按音符本身的 MIDI pitch 保持水平。",
     usage = "在钢琴窗中选中需要抹平音高曲线的音符，或在轨道中选中音符组。\
 运行 `Flatten Pitch Curve`。\
 选择处理范围：选中音符、选中音符组，或两者一起处理。\
-选择是否抹平 `pitchDelta` 曲线。",
+保持“绘制水平 Studio 2 Pitch Control Curve”启用。",
   },
   {
     name = "Pitch to Parameter",
@@ -60,7 +63,8 @@ local SCRIPT_ENTRIES = {
     sourceKey = "Pitch_To_Param",
     version = "V5",
     requires = "在钢琴窗中选中需要处理的音符。",
-    summary = "将选中音符的音高信息映射到目标参数曲线，用于把旋律音高、弯音或 Synthesizer V Studio 2 计算后的音高转换为张力、气声、性别、清浊、颤音包络、响度等表现参数。",
+    summary = "将选中音符的音高信息映射到目标参数曲线，用于把旋律音高、弯音或 Synthesizer V Studio 2 计"
+      .. "算后的音高转换为张力、气声、性别、清浊、颤音包络、响度等表现参数。",
     usage = "在钢琴窗中选中需要处理的音符。\
 运行 `Pitch to Parameter`。\
 选择目标参数，或填写自定义参数名。\
@@ -1427,7 +1431,7 @@ function getClientInfo()
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 1,
+    versionNumber = 2,
     minEditorVersion = 65537,
   }
 end
@@ -1571,10 +1575,36 @@ local function getOrCreateOperation(operations, groupTarget)
       groupTarget = groupTarget,
       label = getGroupName(groupTarget),
       ranges = {},
+      notes = {},
+      noteKeys = {},
     }
   end
 
   return operations[key]
+end
+
+local function addFlatNoteToOperation(operation, startPos, endPos, pitch)
+  if type(startPos) ~= "number" or type(endPos) ~= "number" or type(pitch) ~= "number" then
+    return false
+  end
+
+  if endPos <= startPos then
+    return false
+  end
+
+  local key = tostring(startPos) .. ":" .. tostring(endPos) .. ":" .. tostring(pitch)
+  if operation.noteKeys[key] then
+    return false
+  end
+
+  operation.noteKeys[key] = true
+  table.insert(operation.notes, {
+    start = startPos,
+    finish = endPos,
+    pitch = pitch,
+  })
+
+  return true
 end
 
 local function addRangesToOperation(operation, ranges)
@@ -1651,6 +1681,10 @@ local function buildScopeChoices(noteCount, groupCount)
   return choices, values
 end
 
+local function rangeOverlaps(startPos, endPos, range)
+  return endPos >= range.start and startPos <= range.finish
+end
+
 local function addNoteOperations(operations, currentGroup, selectedNotes)
   local groupTarget = currentGroup:getTarget()
   if groupTarget == nil then
@@ -1665,7 +1699,34 @@ local function addNoteOperations(operations, currentGroup, selectedNotes)
   local operation = getOrCreateOperation(operations, groupTarget)
   addRangesToOperation(operation, ranges)
 
+  for _, note in ipairs(selectedNotes) do
+    addFlatNoteToOperation(operation, note:getOnset(), note:getEnd(), note:getPitch())
+  end
+
   return #ranges
+end
+
+local function addGroupNotesToOperation(operation, range)
+  local added = 0
+  local numNotes = safeCall(function()
+    return operation.groupTarget:getNumNotes()
+  end) or 0
+
+  for i = 1, numNotes do
+    local note = operation.groupTarget:getNote(i)
+    local noteStart = note:getOnset()
+    local noteEnd = note:getEnd()
+
+    if rangeOverlaps(noteStart, noteEnd, range) then
+      local startPos = math.max(noteStart, range.start)
+      local endPos = math.min(noteEnd, range.finish)
+      if addFlatNoteToOperation(operation, startPos, endPos, note:getPitch()) then
+        added = added + 1
+      end
+    end
+  end
+
+  return added
 end
 
 local function addGroupOperations(operations, selectedGroups)
@@ -1681,6 +1742,7 @@ local function addGroupOperations(operations, selectedGroups)
       if range ~= nil then
         local operation = getOrCreateOperation(operations, groupTarget)
         table.insert(operation.ranges, range)
+        addGroupNotesToOperation(operation, range)
         added = added + 1
       end
     end
@@ -1797,10 +1859,6 @@ local function flattenPitchDelta(operation, options)
   return stats
 end
 
-local function rangeOverlaps(startPos, endPos, range)
-  return endPos >= range.start and startPos <= range.finish
-end
-
 local function pitchControlSpan(control)
   local position = safeCall(function()
     return control:getPosition()
@@ -1891,6 +1949,66 @@ local function removePitchControls(operation)
   }
 end
 
+local function createPitchControlCurve(startPos, endPos, pitch)
+  local duration = endPos - startPos
+  if duration <= 0 then
+    return nil
+  end
+
+  local control = safeCall(function()
+    return SV:create("PitchControlCurve")
+  end)
+
+  if control == nil then
+    return nil
+  end
+
+  local ok = safeCall(function()
+    control:setPosition(startPos)
+    control:setPitch(pitch)
+    control:setPoints({
+      { 0, 0 },
+      { duration, 0 },
+    })
+    return true
+  end)
+
+  if not ok then
+    return nil
+  end
+
+  return control
+end
+
+local function drawFlatPitchControls(operation)
+  local stats = {
+    created = 0,
+    failed = 0,
+    unsupported = false,
+  }
+
+  for _, note in ipairs(operation.notes) do
+    local control = createPitchControlCurve(note.start, note.finish, note.pitch)
+    if control == nil then
+      stats.failed = stats.failed + 1
+    else
+      local ok = safeCall(function()
+        operation.groupTarget:addPitchControl(control)
+        return true
+      end)
+
+      if ok then
+        stats.created = stats.created + 1
+      else
+        stats.failed = stats.failed + 1
+        stats.unsupported = true
+      end
+    end
+  end
+
+  return stats
+end
+
 local function buildOperations(scope, currentGroup, selectedNotes, selectedGroups)
   local operations = {}
 
@@ -1905,17 +2023,33 @@ local function buildOperations(scope, currentGroup, selectedNotes, selectedGroup
   return finalizeOperations(operations)
 end
 
-local function buildSummary(operations, pitchStats, controlStats, options)
+local function buildSummary(operations, pitchStats, removedControlStats, drawnControlStats, options)
   local totalRanges = 0
+  local totalNotes = 0
 
   for _, operation in ipairs(operations) do
     totalRanges = totalRanges + #operation.ranges
+    totalNotes = totalNotes + #operation.notes
   end
 
   local summary = "音高曲线已抹平。\n处理音符组目标: "
     .. #operations
     .. "\n处理范围: "
     .. totalRanges
+    .. "\n水平音高线目标音符: "
+    .. totalNotes
+
+  if options.drawFlatPitchControls then
+    summary = summary .. "\n水平 Pitch Control Curve: 创建 " .. drawnControlStats.created .. " 条"
+
+    if drawnControlStats.failed > 0 then
+      summary = summary .. "，失败 " .. drawnControlStats.failed .. " 条"
+    end
+
+    if drawnControlStats.unsupported > 0 then
+      summary = summary .. "\n不支持写入 Pitch Control Curve 的目标: " .. drawnControlStats.unsupported
+    end
+  end
 
   if options.flattenPitchDelta then
     summary = summary
@@ -1933,9 +2067,9 @@ local function buildSummary(operations, pitchStats, controlStats, options)
   end
 
   if options.clearPitchControls then
-    summary = summary .. "\nStudio 2 音高控制: 移除 " .. controlStats.removed .. " 个对象"
-    if controlStats.unsupported > 0 then
-      summary = summary .. "\n不支持音高控制 API 的目标: " .. controlStats.unsupported
+    summary = summary .. "\n原有 Studio 2 音高控制: 移除 " .. removedControlStats.removed .. " 个对象"
+    if removedControlStats.unsupported > 0 then
+      summary = summary .. "\n不支持音高控制 API 的目标: " .. removedControlStats.unsupported
     end
   end
 
@@ -1964,8 +2098,8 @@ function main()
 
   local scopeChoices, scopeValues = buildScopeChoices(#selectedNotes, #selectedGroups)
   local inputForm = {
-    title = "音高曲线抹平 V1",
-    message = "将选中范围内的 pitchDelta 写回 0 cents，并可移除 Studio 2 音高控制对象。",
+    title = "音高曲线抹平 V2",
+    message = "为选中音符绘制完全水平的 Studio 2 音高控制曲线，并可清理原有 pitchDelta 和音高控制。",
     buttons = "OkCancel",
     widgets = {
       {
@@ -1976,15 +2110,21 @@ function main()
         default = 0,
       },
       {
+        name = "drawFlatPitchControls",
+        type = "CheckBox",
+        text = "绘制水平 Studio 2 Pitch Control Curve",
+        default = true,
+      },
+      {
         name = "flattenPitchDelta",
         type = "CheckBox",
-        text = "抹平 pitchDelta 曲线到 0 cents",
+        text = "同时清零 pitchDelta 曲线",
         default = true,
       },
       {
         name = "clearPitchControls",
         type = "CheckBox",
-        text = "移除范围内 Studio 2 音高控制点/曲线",
+        text = "先移除范围内原有 Studio 2 音高控制点/曲线",
         default = true,
       },
       {
@@ -2003,12 +2143,13 @@ function main()
 
   local options = {
     scope = scopeValues[(result.answers.scope or 0) + 1],
+    drawFlatPitchControls = result.answers.drawFlatPitchControls,
     flattenPitchDelta = result.answers.flattenPitchDelta,
     clearPitchControls = result.answers.clearPitchControls,
     protectOutside = result.answers.protectOutside,
   }
 
-  if not options.flattenPitchDelta and not options.clearPitchControls then
+  if not options.drawFlatPitchControls and not options.flattenPitchDelta and not options.clearPitchControls then
     SV:showMessageBox("提示", "没有启用任何处理项。")
     return
   end
@@ -2034,8 +2175,21 @@ function main()
     removed = 0,
     unsupported = 0,
   }
+  local drawnControlStats = {
+    created = 0,
+    failed = 0,
+    unsupported = 0,
+  }
 
   for _, operation in ipairs(operations) do
+    if options.clearPitchControls then
+      local stats = removePitchControls(operation)
+      controlStats.removed = controlStats.removed + stats.removed
+      if stats.unsupported then
+        controlStats.unsupported = controlStats.unsupported + 1
+      end
+    end
+
     if options.flattenPitchDelta then
       local stats = flattenPitchDelta(operation, options)
       pitchStats.removed = pitchStats.removed + stats.removed
@@ -2046,16 +2200,17 @@ function main()
       end
     end
 
-    if options.clearPitchControls then
-      local stats = removePitchControls(operation)
-      controlStats.removed = controlStats.removed + stats.removed
+    if options.drawFlatPitchControls then
+      local stats = drawFlatPitchControls(operation)
+      drawnControlStats.created = drawnControlStats.created + stats.created
+      drawnControlStats.failed = drawnControlStats.failed + stats.failed
       if stats.unsupported then
-        controlStats.unsupported = controlStats.unsupported + 1
+        drawnControlStats.unsupported = drawnControlStats.unsupported + 1
       end
     end
   end
 
-  SV:showMessageBox("完成", buildSummary(operations, pitchStats, controlStats, options))
+  SV:showMessageBox("完成", buildSummary(operations, pitchStats, controlStats, drawnControlStats, options))
   SV:finish()
 end
 ]====],
@@ -2758,6 +2913,7 @@ local detailsButtonValue = nil
 local refreshButtonValue = nil
 local initialized = false
 local callbacksRegistered = false
+local scriptRunQueued = false
 
 local function safeCall(fn)
   local ok, result = pcall(fn)
@@ -3148,7 +3304,29 @@ local function initializeValues()
   end)
 
   setValueChangeCallback(runButtonValue, function()
-    runEntry(getSelectedEntry())
+    if scriptRunQueued then
+      return
+    end
+
+    scriptRunQueued = true
+    local entry = getSelectedEntry()
+    safeCall(function()
+      runButtonValue:setValue(false)
+      return true
+    end)
+
+    local scheduled = safeCall(function()
+      SV:setTimeout(0, function()
+        scriptRunQueued = false
+        runEntry(entry)
+      end)
+      return true
+    end)
+
+    if not scheduled then
+      scriptRunQueued = false
+      runEntry(entry)
+    end
   end)
 
   setValueChangeCallback(detailsButtonValue, function()

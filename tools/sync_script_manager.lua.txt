@@ -37,6 +37,57 @@ local function luaQuote(value)
   return string.format("%q", tostring(value or ""))
 end
 
+local function splitForLuaExpression(value, maxChars)
+  value = tostring(value or "")
+  local chunks = {}
+  local current = {}
+  local count = 0
+
+  for _, code in utf8.codes(value) do
+    local char = utf8.char(code)
+    table.insert(current, char)
+
+    if char == "\n" then
+      count = 0
+    else
+      count = count + 1
+    end
+
+    if count >= maxChars then
+      table.insert(chunks, table.concat(current))
+      current = {}
+      count = 0
+    end
+  end
+
+  if #current > 0 then
+    table.insert(chunks, table.concat(current))
+  end
+
+  if #chunks == 0 then
+    table.insert(chunks, "")
+  end
+
+  return chunks
+end
+
+local function luaStringExpression(value, continuationIndent)
+  local chunks = splitForLuaExpression(value, 56)
+  if #chunks == 1 then
+    return luaQuote(chunks[1])
+  end
+
+  local parts = {
+    luaQuote(chunks[1]),
+  }
+
+  for i = 2, #chunks do
+    table.insert(parts, "\n" .. continuationIndent .. ".. " .. luaQuote(chunks[i]))
+  end
+
+  return table.concat(parts)
+end
+
 local function makeSVStub()
   local stub = {}
   setmetatable(stub, {
@@ -298,9 +349,9 @@ local function renderEntries(scripts)
     table.insert(lines, "    file = " .. luaQuote(script.file) .. ",")
     table.insert(lines, "    sourceKey = " .. luaQuote(script.sourceKey) .. ",")
     table.insert(lines, "    version = " .. luaQuote(script.version) .. ",")
-    table.insert(lines, "    requires = " .. luaQuote(script.requires) .. ",")
-    table.insert(lines, "    summary = " .. luaQuote(script.summary) .. ",")
-    table.insert(lines, "    usage = " .. luaQuote(script.usage) .. ",")
+    table.insert(lines, "    requires = " .. luaStringExpression(script.requires, "      ") .. ",")
+    table.insert(lines, "    summary = " .. luaStringExpression(script.summary, "      ") .. ",")
+    table.insert(lines, "    usage = " .. luaStringExpression(script.usage, "      ") .. ",")
     table.insert(lines, "  },")
   end
 
