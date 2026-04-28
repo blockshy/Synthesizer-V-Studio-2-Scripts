@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Crying Effect",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 8,
+    versionNumber = 9,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -1003,7 +1003,7 @@ function getSidePanelSectionState()
   initializePanel()
 
   return {
-    title = "Crying Effect",
+    title = tr("哭腔效果", "Crying Effect"),
     rows = {
       {
         type = "Label",

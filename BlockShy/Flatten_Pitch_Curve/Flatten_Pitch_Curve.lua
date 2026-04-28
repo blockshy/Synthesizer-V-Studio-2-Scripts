@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 4,
+    versionNumber = 5,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -933,7 +933,7 @@ function getSidePanelSectionState()
   initializePanel()
 
   return {
-    title = "Flatten Pitch Curve",
+    title = tr("音高曲线抹平", "Flatten Pitch Curve"),
     rows = {
       {
         type = "Label",

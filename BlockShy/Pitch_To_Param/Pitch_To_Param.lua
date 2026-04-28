@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Pitch to Parameter",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 7,
+    versionNumber = 8,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -807,7 +807,7 @@ function getSidePanelSectionState()
   initializePanel()
 
   return {
-    title = "Pitch to Parameter",
+    title = tr("音高转参数", "Pitch to Parameter"),
     rows = {
       {
         type = "Label",

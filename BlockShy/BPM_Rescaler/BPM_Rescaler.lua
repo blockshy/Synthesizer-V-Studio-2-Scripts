@@ -3,7 +3,7 @@ function getClientInfo()
     name = "BPM Rescaler",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 8,
+    versionNumber = 9,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -633,7 +633,7 @@ function getSidePanelSectionState()
   initializePanel()
 
   return {
-    title = "BPM Rescaler",
+    title = tr("BPM 重缩放", "BPM Rescaler"),
     rows = {
       {
         type = "Label",
