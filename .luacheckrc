@@ -4,5 +4,6 @@ max_line_length = 120
 globals = {
   "SV",
   "getClientInfo",
-  "main"
+  "main",
+  "getSidePanelSectionState"
 }
