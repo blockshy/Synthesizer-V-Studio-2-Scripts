@@ -1,18 +1,43 @@
+local SIDE_PANEL_MIN_VERSION = 131330
+
+local function getHostVersionNumber()
+  local ok, hostInfo = pcall(function()
+    return SV:getHostInfo()
+  end)
+
+  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
+    return hostInfo.hostVersionNumber
+  end
+
+  return 0
+end
+
+local function isSidePanelHost()
+  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
+end
+
 function getClientInfo()
-  return {
+  local info = {
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 7,
-    minEditorVersion = 131330,
-    type = "SidePanelSection",
+    versionNumber = 8,
+    minEditorVersion = 0,
   }
+
+  if isSidePanelHost() then
+    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
+    info.type = "SidePanelSection"
+  end
+
+  return info
 end
 
 local SCOPE_NOTES = "notes"
 local SCOPE_GROUPS = "groups"
 local SCOPE_BOTH = "both"
 local languageValue = nil
+local legacyLanguageValue = 0
 
 local function safeCall(fn)
   local ok, result = pcall(fn)
@@ -24,12 +49,18 @@ end
 
 local function isEnglish()
   if languageValue == nil then
-    return false
+    return legacyLanguageValue == 1
   end
 
-  return safeCall(function()
+  local value = safeCall(function()
     return languageValue:getValue()
-  end) == 1
+  end)
+
+  if value == nil then
+    value = legacyLanguageValue
+  end
+
+  return value == 1
 end
 
 local function tr(zh, en)
@@ -602,13 +633,21 @@ local function buildSummary(operations, pitchStats, removedControlStats, drawnCo
     totalNotes = totalNotes + #operation.notes
   end
 
-  local summary = tr(
-    "音高曲线已抹平。\n处理音符组目标: ",
-    "Pitch curve flattened.\nNote group targets: "
-  ) .. #operations .. tr("\n处理范围: ", "\nRanges: ") .. totalRanges .. tr(
-    "\n水平音高线目标音符: ",
-    "\nFlat pitch target notes: "
-  ) .. totalNotes
+  local summaryPrefix = tr("音高曲线已抹平。\n", "Pitch curve flattened.\n")
+  if not options.drawFlatPitchControls then
+    summaryPrefix = tr(
+      "pitchDelta 已清理（兼容降级模式，未写入 Studio 2 Pitch Control Curve）。\n",
+      "pitchDelta cleaned (compatibility fallback; no Studio 2 Pitch Control Curve was written).\n"
+    )
+  end
+
+  local summary = summaryPrefix
+    .. tr("处理音符组目标: ", "Note group targets: ")
+    .. #operations
+    .. tr("\n处理范围: ", "\nRanges: ")
+    .. totalRanges
+    .. tr("\n水平音高线目标音符: ", "\nFlat pitch target notes: ")
+    .. totalNotes
 
   if options.drawFlatPitchControls then
     summary = summary
@@ -683,8 +722,17 @@ local initialized = false
 local isRunning = false
 
 local function showMessage(title, message)
-  safeCall(function()
+  local shown = safeCall(function()
     SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+
+  if shown then
+    return
+  end
+
+  safeCall(function()
+    SV:showMessageBox(title, message)
     return true
   end)
 end
@@ -817,7 +865,7 @@ local function resolvePanelScope(selectedNotes, _selectedGroups)
   return SCOPE_GROUPS
 end
 
-local function runPanel()
+local function runFlattenOptions(options)
   if isRunning then
     return
   end
@@ -853,14 +901,6 @@ local function runPanel()
     isRunning = false
     return
   end
-
-  local options = {
-    scope = resolvePanelScope(selectedNotes, selectedGroups),
-    drawFlatPitchControls = getWidgetValue(drawFlatPitchControlsValue, true),
-    flattenPitchDelta = getWidgetValue(flattenPitchDeltaValue, true),
-    clearPitchControls = getWidgetValue(clearPitchControlsValue, true),
-    protectOutside = getWidgetValue(protectOutsideValue, true),
-  }
 
   if not options.drawFlatPitchControls and not options.flattenPitchDelta and not options.clearPitchControls then
     showMessage(tr("提示", "Notice"), tr("没有启用任何处理项。", "No processing option is enabled."))
@@ -931,6 +971,122 @@ local function runPanel()
   showMessage(tr("完成", "Done"), buildSummary(operations, pitchStats, controlStats, drawnControlStats, options))
   updateStatus()
   isRunning = false
+end
+
+local function runPanel()
+  local editor = SV:getMainEditor()
+  local selection = editor:getSelection()
+  local selectedNotes = getSortedSelectedNotes(selection)
+  local selectedGroups = getSelectedGroups(editor)
+
+  runFlattenOptions({
+    scope = resolvePanelScope(selectedNotes, selectedGroups),
+    drawFlatPitchControls = getWidgetValue(drawFlatPitchControlsValue, true),
+    flattenPitchDelta = getWidgetValue(flattenPitchDeltaValue, true),
+    clearPitchControls = getWidgetValue(clearPitchControlsValue, true),
+    protectOutside = getWidgetValue(protectOutsideValue, true),
+  })
+end
+
+local function getDialogAnswers(result)
+  if type(result) ~= "table" then
+    return nil
+  end
+
+  if result.status ~= true and result.status ~= "Ok" and result.status ~= "OK" and result.status ~= "ok" then
+    return nil
+  end
+
+  return result.answers or {}
+end
+
+local function finishScript()
+  safeCall(function()
+    SV:finish()
+    return true
+  end)
+end
+
+local function resolveLegacyScope(scopeChoice, selectedNotes)
+  if scopeChoice == 1 then
+    return SCOPE_NOTES
+  end
+
+  if scopeChoice == 2 then
+    return SCOPE_GROUPS
+  end
+
+  if scopeChoice == 3 then
+    return SCOPE_BOTH
+  end
+
+  if #selectedNotes > 0 then
+    return SCOPE_NOTES
+  end
+
+  return SCOPE_GROUPS
+end
+
+function main()
+  local editor = SV:getMainEditor()
+  local selection = editor:getSelection()
+  local selectedNotes = getSortedSelectedNotes(selection)
+
+  local result = SV:showCustomDialog({
+    title = "Flatten Pitch Curve",
+    message = "SV1 兼容模式只清理 pitchDelta，不能写入 Studio 2 Pitch Control Curve。\n"
+      .. "SV1 compatibility mode cleans pitchDelta only and cannot write Studio 2 Pitch Control Curves.",
+    buttons = "OkCancel",
+    widgets = {
+      {
+        name = "language",
+        type = "ComboBox",
+        label = "语言 / Language",
+        choices = { "中文", "English" },
+        default = legacyLanguageValue,
+      },
+      {
+        name = "scope",
+        type = "ComboBox",
+        label = "处理范围 / Scope",
+        choices = {
+          "自动：优先音符 / Auto: prefer notes",
+          "选中音符 / Selected notes",
+          "选中音符组 / Selected note groups",
+          "选中音符 + 音符组 / Selected notes + note groups",
+        },
+        default = 0,
+      },
+      {
+        name = "flattenPitchDelta",
+        type = "CheckBox",
+        text = "清零 pitchDelta 曲线 / Reset pitchDelta curve",
+        default = true,
+      },
+      {
+        name = "protectOutside",
+        type = "CheckBox",
+        text = "保护选区外相邻 pitchDelta 曲线 / Protect adjacent pitchDelta outside selection",
+        default = true,
+      },
+    },
+  })
+
+  local answers = getDialogAnswers(result)
+  if answers == nil then
+    finishScript()
+    return
+  end
+
+  legacyLanguageValue = tonumber(answers.language) or 0
+  runFlattenOptions({
+    scope = resolveLegacyScope(tonumber(answers.scope) or 0, selectedNotes),
+    drawFlatPitchControls = false,
+    flattenPitchDelta = answers.flattenPitchDelta ~= false,
+    clearPitchControls = false,
+    protectOutside = answers.protectOutside ~= false,
+  })
+  finishScript()
 end
 
 local function initializePanel()

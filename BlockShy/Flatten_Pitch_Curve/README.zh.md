@@ -15,17 +15,18 @@
 ## 用法
 
 1. 在钢琴窗中选中需要抹平音高曲线的音符，或在轨道中选中音符组。
-2. 打开 Scripts 侧边栏中的 `Flatten Pitch Curve` 面板。
+2. SV2.1.2+：打开 Scripts 侧边栏中的 `Flatten Pitch Curve` 面板；SV1/旧版本：从脚本菜单运行 `Flatten Pitch Curve`，在弹窗中填写参数。
 3. 选择处理范围：选中音符、选中音符组，或两者一起处理。
 4. 保持“绘制水平 Studio 2 Pitch Control Curve”启用。
 5. 按需选择是否清零 `pitchDelta` 曲线。
 6. 按需选择是否先移除范围内原有 Studio 2 音高控制点/曲线。
-7. 点击 `Run` 执行。
+7. SV2 面板中点击 `Run` 执行；SV1 弹窗中点击 `OK` 执行。
 
 ## 注意事项
 
 - 脚本不会改变音符音高、歌词、音符长度或音符位置。
-- 本脚本是 Synthesizer V Studio 2.1.2+ 侧边栏脚本，不再通过顶部 Scripts 菜单弹窗运行。
+- Synthesizer V Studio 2.1.2+ 会以侧边栏脚本运行；SV1/旧版本会以传统 `main()` 弹窗脚本运行。
+- SV1 兼容模式只能清理/清零 `pitchDelta`，不能写入 Studio 2 Pitch Control Curve，因此抹平效果是降级处理。
 - 面板标题和界面文本可通过“语言 / Language”切换中文或英文，默认中文；宿主侧边栏脚本列表名称来自静态 metadata，不能随面板开关实时切换。
 - 面板默认显示完整控制项；“功能与用法”说明默认隐藏，可通过“显示功能与用法”展开。
 - 只清零 `pitchDelta` 不足以抹平 SV2 自动绘制的音高；默认会额外写入水平 Pitch Control Curve。

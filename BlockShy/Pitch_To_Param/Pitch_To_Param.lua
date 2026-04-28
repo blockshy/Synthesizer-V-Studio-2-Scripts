@@ -1,12 +1,36 @@
+local SIDE_PANEL_MIN_VERSION = 131330
+
+local function getHostVersionNumber()
+  local ok, hostInfo = pcall(function()
+    return SV:getHostInfo()
+  end)
+
+  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
+    return hostInfo.hostVersionNumber
+  end
+
+  return 0
+end
+
+local function isSidePanelHost()
+  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
+end
+
 function getClientInfo()
-  return {
+  local info = {
     name = "Pitch to Parameter",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 10,
-    minEditorVersion = 131330,
-    type = "SidePanelSection",
+    versionNumber = 11,
+    minEditorVersion = 0,
   }
+
+  if isSidePanelHost() then
+    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
+    info.type = "SidePanelSection"
+  end
+
+  return info
 end
 
 local TARGET_PARAM_CANDIDATES = {
@@ -356,10 +380,19 @@ local function clearRanges(param, ranges)
   local removed = 0
 
   for _, range in ipairs(ranges) do
-    local points = param:getPoints(range.start, range.finish)
-    removed = removed + #points
-    if #points > 0 then
-      param:remove(range.start, range.finish)
+    local points = safeCall(function()
+      return param:getPoints(range.start, range.finish)
+    end)
+
+    if type(points) == "table" then
+      removed = removed + #points
+    end
+
+    if type(points) ~= "table" or #points > 0 then
+      safeCall(function()
+        param:remove(range.start, range.finish)
+        return true
+      end)
     end
   end
 
@@ -367,11 +400,29 @@ local function clearRanges(param, ranges)
 end
 
 local function clearAllPoints(param)
-  local points = param:getAllPoints()
+  local points = safeCall(function()
+    return param:getAllPoints()
+  end)
+
+  if type(points) ~= "table" then
+    safeCall(function()
+      param:removeAll()
+      return true
+    end)
+    return 0
+  end
+
   local removed = #points
 
   if removed > 0 then
-    param:removeAll()
+    local cleared = safeCall(function()
+      param:removeAll()
+      return true
+    end)
+
+    if not cleared then
+      return 0
+    end
   end
 
   return removed
@@ -406,6 +457,7 @@ local directionValue = nil
 local languageValue = nil
 local introValue = nil
 local introExpandedValue = nil
+local legacyLanguageValue = 0
 local runButtonValue = nil
 local refreshButtonValue = nil
 local statusValue = nil
@@ -413,8 +465,17 @@ local initialized = false
 local isRunning = false
 
 local function showMessage(title, message)
-  safeCall(function()
+  local shown = safeCall(function()
     SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+
+  if shown then
+    return
+  end
+
+  safeCall(function()
+    SV:showMessageBox(title, message)
     return true
   end)
 end
@@ -451,7 +512,7 @@ local function getWidgetValue(widgetValue, fallback)
 end
 
 local function isEnglish()
-  return getWidgetValue(languageValue, 0) == 1
+  return getWidgetValue(languageValue, legacyLanguageValue) == 1
 end
 
 local function tr(zh, en)
@@ -580,7 +641,7 @@ local function resolveTargetParamName()
   return candidate.typeName
 end
 
-local function runPanel()
+local function runPitchOptions(options)
   if isRunning then
     return
   end
@@ -636,7 +697,7 @@ local function runPanel()
     return
   end
 
-  local targetParamName = resolveTargetParamName()
+  local targetParamName = options.targetParamName
   if targetParamName == nil then
     showMessage(
       tr("错误", "Error"),
@@ -658,21 +719,21 @@ local function runPanel()
 
   local targetMin, targetMax, targetDefinition = getParamRange(targetParam)
   local targetRange = targetMax - targetMin
-  local sampleDenominator = SAMPLE_DENOMINATORS[(getWidgetValue(sampleIntervalValue, 2) or 2) + 1] or 32
+  local sampleDenominator = SAMPLE_DENOMINATORS[(options.sampleInterval or 2) + 1] or 32
   local step = math.floor((SV.QUARTER or 705600000) / sampleDenominator)
   if step < 1 then
     step = 1
   end
 
-  local simplifyThreshold = targetRange * ((getWidgetValue(simplifyPercentValue, 0.5) or 0) / 100.0)
+  local simplifyThreshold = targetRange * ((options.simplifyPercent or 0) / 100.0)
   local ranges = collectMergedRanges(selectedNotes)
 
   local context = {
-    sourceMode = getWidgetValue(sourceModeValue, 0),
-    densityMode = getWidgetValue(densityModeValue, 0),
-    centerPitch = getWidgetValue(centerPitchValue, getAverageSelectedPitch(selectedNotes)),
-    strength = getWidgetValue(strengthValue, 0.05),
-    isInverted = (getWidgetValue(directionValue, 0) == 1),
+    sourceMode = options.sourceMode or 0,
+    densityMode = options.densityMode or 0,
+    centerPitch = options.centerPitch or getAverageSelectedPitch(selectedNotes),
+    strength = options.strength or 0.05,
+    isInverted = ((options.directionMode or 0) == 1),
     step = step,
     simplifyThreshold = simplifyThreshold,
     targetMin = targetMin,
@@ -709,7 +770,7 @@ local function runPanel()
     return true
   end)
 
-  local writeMode = getWidgetValue(writeModeValue, 0)
+  local writeMode = options.writeMode or 0
   local removedPoints = 0
 
   if writeMode == WRITE_REBUILD_TARGET then
@@ -767,6 +828,189 @@ local function runPanel()
   showMessage(tr("完成", "Done"), summary)
   updateStatus()
   isRunning = false
+end
+
+local function runPanel()
+  runPitchOptions({
+    targetParamName = resolveTargetParamName(),
+    sourceMode = getWidgetValue(sourceModeValue, 0),
+    densityMode = getWidgetValue(densityModeValue, 0),
+    writeMode = getWidgetValue(writeModeValue, 0),
+    sampleInterval = getWidgetValue(sampleIntervalValue, 2),
+    simplifyPercent = getWidgetValue(simplifyPercentValue, 0.5),
+    centerPitch = getWidgetValue(centerPitchValue, nil),
+    strength = getWidgetValue(strengthValue, 0.05),
+    directionMode = getWidgetValue(directionValue, 0),
+  })
+end
+
+local function getDialogAnswers(result)
+  if type(result) ~= "table" then
+    return nil
+  end
+
+  if result.status ~= true and result.status ~= "Ok" and result.status ~= "OK" and result.status ~= "ok" then
+    return nil
+  end
+
+  return result.answers or {}
+end
+
+local function finishScript()
+  safeCall(function()
+    SV:finish()
+    return true
+  end)
+end
+
+local function resolveLegacyTargetParamName(answers)
+  local customParam = trim(answers.customParam)
+  if customParam ~= "" then
+    return customParam
+  end
+
+  local targetIndex = tonumber(answers.targetParam) or 0
+  if targetIndex == #TARGET_PARAM_CANDIDATES then
+    return nil
+  end
+
+  local candidate = TARGET_PARAM_CANDIDATES[targetIndex + 1]
+  if candidate == nil then
+    return nil
+  end
+
+  return candidate.typeName
+end
+
+function main()
+  local editor = SV:getMainEditor()
+  local selection = editor:getSelection()
+  local selectedNotes = getSortedSelectedNotes(selection)
+  local centerPitch = getAverageSelectedPitch(selectedNotes)
+
+  local result = SV:showCustomDialog({
+    title = "Pitch to Parameter",
+    message = "将选中音符的音高映射到目标参数。\nMap selected-note pitch into a target parameter.",
+    buttons = "OkCancel",
+    widgets = {
+      {
+        name = "language",
+        type = "ComboBox",
+        label = "语言 / Language",
+        choices = { "中文", "English" },
+        default = legacyLanguageValue,
+      },
+      {
+        name = "targetParam",
+        type = "ComboBox",
+        label = "目标参数 / Target parameter",
+        choices = buildStaticParamLabels(),
+        default = 0,
+      },
+      {
+        name = "customParam",
+        type = "TextBox",
+        label = "自定义参数名 / Custom parameter name",
+        default = "",
+      },
+      {
+        name = "sourceMode",
+        type = "ComboBox",
+        label = "音高来源 / Pitch source",
+        choices = {
+          "轻量：音符音高 + pitchDelta / Lightweight: note pitch + pitchDelta",
+          "仅跟随 pitchDelta / PitchDelta only",
+        },
+        default = 0,
+      },
+      {
+        name = "densityMode",
+        type = "ComboBox",
+        label = "点密度 / Point density",
+        choices = {
+          "智能精简 / Smart simplify",
+          "保留全部采样点 / Keep all samples",
+          "强制线性 / Force linear",
+        },
+        default = 0,
+      },
+      {
+        name = "writeMode",
+        type = "ComboBox",
+        label = "写入模式 / Write mode",
+        choices = {
+          "覆盖选中音符范围 / Overwrite selected note ranges",
+          "仅追加/更新同位置点 / Append/update only",
+          "清空目标参数后重建 / Clear target parameter and rebuild",
+        },
+        default = 0,
+      },
+      {
+        name = "sampleInterval",
+        type = "ComboBox",
+        label = "采样间隔 / Sample interval",
+        choices = { "1/8", "1/16", "1/32", "1/64" },
+        default = 2,
+      },
+      {
+        name = "simplifyPercent",
+        type = "Slider",
+        label = "精简阈值 / Simplify threshold",
+        format = "%1.2f",
+        minValue = 0.0,
+        maxValue = 5.0,
+        interval = 0.05,
+        default = 0.5,
+      },
+      {
+        name = "centerPitch",
+        type = "Slider",
+        label = "参考中心音高 / Reference center pitch",
+        format = "%1.0f",
+        minValue = 36,
+        maxValue = 96,
+        interval = 1,
+        default = centerPitch,
+      },
+      {
+        name = "strength",
+        type = "Slider",
+        label = "映射强度 / Mapping strength",
+        format = "%1.2f",
+        minValue = 0.01,
+        maxValue = 2.0,
+        interval = 0.01,
+        default = 0.05,
+      },
+      {
+        name = "directionMode",
+        type = "ComboBox",
+        label = "方向 / Direction",
+        choices = { "正向 / Normal", "反向 / Inverted" },
+        default = 0,
+      },
+    },
+  })
+
+  local answers = getDialogAnswers(result)
+  if answers == nil then
+    finishScript()
+    return
+  end
+
+  legacyLanguageValue = tonumber(answers.language) or 0
+  runPitchOptions({
+    targetParamName = resolveLegacyTargetParamName(answers),
+    sourceMode = tonumber(answers.sourceMode) or 0,
+    densityMode = tonumber(answers.densityMode) or 0,
+    writeMode = tonumber(answers.writeMode) or 0,
+    sampleInterval = tonumber(answers.sampleInterval) or 2,
+    simplifyPercent = tonumber(answers.simplifyPercent) or 0.5,
+    centerPitch = tonumber(answers.centerPitch) or centerPitch,
+    strength = tonumber(answers.strength) or 0.05,
+    directionMode = tonumber(answers.directionMode) or 0,
+  })
+  finishScript()
 end
 
 local function initializePanel()

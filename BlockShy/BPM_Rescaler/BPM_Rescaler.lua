@@ -1,12 +1,36 @@
+local SIDE_PANEL_MIN_VERSION = 131330
+
+local function getHostVersionNumber()
+  local ok, hostInfo = pcall(function()
+    return SV:getHostInfo()
+  end)
+
+  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
+    return hostInfo.hostVersionNumber
+  end
+
+  return 0
+end
+
+local function isSidePanelHost()
+  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
+end
+
 function getClientInfo()
-  return {
+  local info = {
     name = "BPM Rescaler",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 11,
-    minEditorVersion = 131330,
-    type = "SidePanelSection",
+    versionNumber = 12,
+    minEditorVersion = 0,
   }
+
+  if isSidePanelHost() then
+    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
+    info.type = "SidePanelSection"
+  end
+
+  return info
 end
 
 local PARAM_TYPES = {
@@ -321,6 +345,7 @@ local processPitchControlsValue = nil
 local languageValue = nil
 local introValue = nil
 local introExpandedValue = nil
+local legacyLanguageValue = 0
 local runButtonValue = nil
 local detectButtonValue = nil
 local statusValue = nil
@@ -328,8 +353,17 @@ local initialized = false
 local isRunning = false
 
 local function showMessage(title, message)
-  safeCall(function()
+  local shown = safeCall(function()
     SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+
+  if shown then
+    return
+  end
+
+  safeCall(function()
+    SV:showMessageBox(title, message)
     return true
   end)
 end
@@ -366,7 +400,7 @@ local function getWidgetValue(widgetValue, fallback)
 end
 
 local function isEnglish()
-  return getWidgetValue(languageValue, 0) == 1
+  return getWidgetValue(languageValue, legacyLanguageValue) == 1
 end
 
 local function tr(zh, en)
@@ -470,7 +504,7 @@ local function refreshDetectedBpm()
   setWidgetValue(statusValue, status)
 end
 
-local function runPanel()
+local function runBpmOptions(options)
   if isRunning then
     return
   end
@@ -511,8 +545,8 @@ local function runPanel()
   local groupOnset = getGroupOnset(currentGroup)
   local tempoMarkCount = getTempoMarkCount(timeAxis)
 
-  local currentBPM = tonumber(getWidgetValue(currentBpmValue, ""))
-  local originalBPM = tonumber(getWidgetValue(originalBpmValue, ""))
+  local currentBPM = tonumber(options.currentBPM)
+  local originalBPM = tonumber(options.originalBPM)
 
   if currentBPM == nil or currentBPM <= 0 or originalBPM == nil or originalBPM <= 0 then
     showMessage(tr("错误", "Error"), tr("请输入有效的 BPM 数值。", "Enter valid BPM values."))
@@ -524,7 +558,7 @@ local function runPanel()
   local anchor = 0
   local anchorLabel = tr("音符组内部 0 位置", "Note group local 0")
 
-  if getWidgetValue(anchorModeValue, 0) == 1 then
+  if options.anchorMode == 1 then
     anchor = getFirstNoteOnset(groupTarget)
     anchorLabel = tr("第一个音符起点", "First note onset")
   end
@@ -533,11 +567,11 @@ local function runPanel()
   local automationStats = { tracks = 0, points = 0, keptPoints = 0, collisions = 0 }
   local pitchStats = { objects = 0, curvePoints = 0 }
 
-  if getWidgetValue(processAutomationValue, true) then
+  if options.processAutomation then
     automationStats = rescaleAutomation(groupTarget, anchor, ratio)
   end
 
-  if getWidgetValue(processPitchControlsValue, true) then
+  if options.processPitchControls then
     pitchStats = rescalePitchControls(groupTarget, anchor, ratio)
   end
 
@@ -603,6 +637,100 @@ local function runPanel()
       .. formatNumber(getTempoAt(timeAxis, groupOnset))
   )
   isRunning = false
+end
+
+local function runPanel()
+  runBpmOptions({
+    currentBPM = getWidgetValue(currentBpmValue, ""),
+    originalBPM = getWidgetValue(originalBpmValue, ""),
+    anchorMode = getWidgetValue(anchorModeValue, 0),
+    processAutomation = getWidgetValue(processAutomationValue, true),
+    processPitchControls = getWidgetValue(processPitchControlsValue, true),
+  })
+end
+
+local function getDialogAnswers(result)
+  if type(result) ~= "table" then
+    return nil
+  end
+
+  if result.status ~= true and result.status ~= "Ok" and result.status ~= "OK" and result.status ~= "ok" then
+    return nil
+  end
+
+  return result.answers or {}
+end
+
+local function finishScript()
+  safeCall(function()
+    SV:finish()
+    return true
+  end)
+end
+
+function main()
+  local detectedBPM = detectCurrentBpm()
+  local currentDefault = detectedBPM or 120
+  local originalDefault = currentDefault / 2
+
+  local result = SV:showCustomDialog({
+    title = "BPM Rescaler",
+    message = "按 BPM 比例重缩放当前音符组目标。\nRescale the current note group target by BPM ratio.",
+    buttons = "OkCancel",
+    widgets = {
+      {
+        name = "language",
+        type = "ComboBox",
+        label = "语言 / Language",
+        choices = { "中文", "English" },
+        default = legacyLanguageValue,
+      },
+      {
+        name = "currentBPM",
+        type = "TextBox",
+        label = "当前 BPM / Current BPM",
+        default = formatNumber(currentDefault),
+      },
+      {
+        name = "originalBPM",
+        type = "TextBox",
+        label = "原始 BPM / Original BPM",
+        default = formatNumber(originalDefault),
+      },
+      {
+        name = "anchorMode",
+        type = "ComboBox",
+        label = "缩放锚点 / Anchor",
+        choices = {
+          "音符组内部 0 位置 / Note group local 0",
+          "第一个音符起点 / First note onset",
+        },
+        default = 0,
+      },
+      {
+        name = "processAutomation",
+        type = "CheckBox",
+        text = "同时缩放参数曲线 / Also rescale automation",
+        default = true,
+      },
+    },
+  })
+
+  local answers = getDialogAnswers(result)
+  if answers == nil then
+    finishScript()
+    return
+  end
+
+  legacyLanguageValue = tonumber(answers.language) or 0
+  runBpmOptions({
+    currentBPM = answers.currentBPM,
+    originalBPM = answers.originalBPM,
+    anchorMode = tonumber(answers.anchorMode) or 0,
+    processAutomation = answers.processAutomation ~= false,
+    processPitchControls = false,
+  })
+  finishScript()
 end
 
 local function initializePanel()

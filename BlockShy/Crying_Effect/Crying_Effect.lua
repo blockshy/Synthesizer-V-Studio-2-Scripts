@@ -1,12 +1,36 @@
+local SIDE_PANEL_MIN_VERSION = 131330
+
+local function getHostVersionNumber()
+  local ok, hostInfo = pcall(function()
+    return SV:getHostInfo()
+  end)
+
+  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
+    return hostInfo.hostVersionNumber
+  end
+
+  return 0
+end
+
+local function isSidePanelHost()
+  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
+end
+
 function getClientInfo()
-  return {
+  local info = {
     name = "Crying Effect",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 11,
-    minEditorVersion = 131330,
-    type = "SidePanelSection",
+    versionNumber = 12,
+    minEditorVersion = 0,
   }
+
+  if isSidePanelHost() then
+    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
+    info.type = "SidePanelSection"
+  end
+
+  return info
 end
 
 local WRITE_OVERWRITE_RANGES = 0
@@ -134,6 +158,7 @@ local CRY_PRESETS = {
 
 local CUSTOM_PRESET_INDEX = #CRY_PRESETS
 local languageValue = nil
+local legacyLanguageValue = 0
 
 local function safeCall(fn)
   local ok, result = pcall(fn)
@@ -145,12 +170,18 @@ end
 
 local function isEnglish()
   if languageValue == nil then
-    return false
+    return legacyLanguageValue == 1
   end
 
-  return safeCall(function()
+  local value = safeCall(function()
     return languageValue:getValue()
-  end) == 1
+  end)
+
+  if value == nil then
+    value = legacyLanguageValue
+  end
+
+  return value == 1
 end
 
 local function tr(zh, en)
@@ -345,10 +376,19 @@ local function clearRanges(param, ranges)
   local removed = 0
 
   for _, range in ipairs(ranges) do
-    local oldPoints = param:getPoints(range.start, range.finish)
-    removed = removed + #oldPoints
-    if #oldPoints > 0 then
-      param:remove(range.start, range.finish)
+    local oldPoints = safeCall(function()
+      return param:getPoints(range.start, range.finish)
+    end)
+
+    if type(oldPoints) == "table" then
+      removed = removed + #oldPoints
+    end
+
+    if type(oldPoints) ~= "table" or #oldPoints > 0 then
+      safeCall(function()
+        param:remove(range.start, range.finish)
+        return true
+      end)
     end
   end
 
@@ -356,11 +396,29 @@ local function clearRanges(param, ranges)
 end
 
 local function clearAllPoints(param)
-  local oldPoints = param:getAllPoints()
+  local oldPoints = safeCall(function()
+    return param:getAllPoints()
+  end)
+
+  if type(oldPoints) ~= "table" then
+    safeCall(function()
+      param:removeAll()
+      return true
+    end)
+    return 0
+  end
+
   local removed = #oldPoints
 
   if removed > 0 then
-    param:removeAll()
+    local cleared = safeCall(function()
+      param:removeAll()
+      return true
+    end)
+
+    if not cleared then
+      return 0
+    end
   end
 
   return removed
@@ -747,8 +805,17 @@ local initialized = false
 local isRunning = false
 
 local function showMessage(title, message)
-  safeCall(function()
+  local shown = safeCall(function()
     SV:showMessageBoxAsync(title, message)
+    return true
+  end)
+
+  if shown then
+    return
+  end
+
+  safeCall(function()
+    SV:showMessageBox(title, message)
     return true
   end)
 end
@@ -870,7 +937,7 @@ local function buildPanelAnswers()
   }
 end
 
-local function runPanel()
+local function runCryingOptions(options)
   if isRunning then
     return
   end
@@ -912,8 +979,6 @@ local function runPanel()
     isRunning = false
     return
   end
-
-  local options = resolveOptions(buildPanelAnswers())
 
   local tasks, skipped = getEnabledTasks(groupTarget, options)
   local taskCount = countTasks(tasks)
@@ -957,6 +1022,139 @@ local function runPanel()
   showMessage(tr("完成", "Done"), summary)
   updateStatus()
   isRunning = false
+end
+
+local function runPanel()
+  runCryingOptions(resolveOptions(buildPanelAnswers()))
+end
+
+local function getDialogAnswers(result)
+  if type(result) ~= "table" then
+    return nil
+  end
+
+  if result.status ~= true and result.status ~= "Ok" and result.status ~= "OK" and result.status ~= "ok" then
+    return nil
+  end
+
+  return result.answers or {}
+end
+
+local function finishScript()
+  safeCall(function()
+    SV:finish()
+    return true
+  end)
+end
+
+function main()
+  local result = SV:showCustomDialog({
+    title = "Crying Effect",
+    message = "为选中音符生成哭腔表现参数。\nGenerate crying-style expression parameters for selected notes.",
+    buttons = "OkCancel",
+    widgets = {
+      {
+        name = "language",
+        type = "ComboBox",
+        label = "语言 / Language",
+        choices = { "中文", "English" },
+        default = legacyLanguageValue,
+      },
+      {
+        name = "preset",
+        type = "ComboBox",
+        label = "预设 / Preset",
+        choices = buildPresetChoices(),
+        default = 1,
+      },
+      {
+        name = "intensity",
+        type = "Slider",
+        label = "预设强度倍率 / Preset strength",
+        format = "%1.1f",
+        minValue = 0.5,
+        maxValue = 1.6,
+        interval = 0.1,
+        default = 1.0,
+      },
+      {
+        name = "writeMode",
+        type = "ComboBox",
+        label = "写入模式 / Write mode",
+        choices = {
+          "覆盖选中音符范围 / Overwrite selected note ranges",
+          "仅追加/更新同位置点 / Append/update only",
+          "清空已启用参数后重建 / Clear enabled parameters and rebuild",
+        },
+        default = 0,
+      },
+      {
+        name = "addVibrato",
+        type = "CheckBox",
+        text = "添加颤音包络 / Add vibrato envelope",
+        default = true,
+      },
+      {
+        name = "addBreath",
+        type = "CheckBox",
+        text = "添加气声 / Add breathiness",
+        default = true,
+      },
+      {
+        name = "addTension",
+        type = "CheckBox",
+        text = "添加张力 / Add tension",
+        default = true,
+      },
+      {
+        name = "addPitchDrop",
+        type = "CheckBox",
+        text = "添加音高哭腔/尾部下坠 / Add pitch cry / tail drop",
+        default = true,
+      },
+      {
+        name = "fixedRandom",
+        type = "CheckBox",
+        text = "固定随机结果 / Fixed random output",
+        default = true,
+      },
+      {
+        name = "dropLastNotesOnly",
+        type = "CheckBox",
+        text = "仅对每段选区最后一个音符添加下坠 / Drop only last note in each range",
+        default = false,
+      },
+    },
+  })
+
+  local answers = getDialogAnswers(result)
+  if answers == nil then
+    finishScript()
+    return
+  end
+
+  legacyLanguageValue = tonumber(answers.language) or 0
+  local panelAnswers = {
+    preset = tonumber(answers.preset) or 1,
+    intensity = tonumber(answers.intensity) or 1.0,
+    writeMode = tonumber(answers.writeMode) or 0,
+    addVibrato = answers.addVibrato ~= false,
+    addBreath = answers.addBreath ~= false,
+    addTension = answers.addTension ~= false,
+    addPitchDrop = answers.addPitchDrop ~= false,
+    attackPercent = 12,
+    peakPercent = 45,
+    releasePercent = 88,
+    randomAmount = 0.12,
+    fixedRandom = answers.fixedRandom ~= false,
+    dropStartPercent = 75,
+    dropDepth = 150,
+    dropLastNotesOnly = answers.dropLastNotesOnly == true,
+    restorePitch = false,
+  }
+
+  runCryingOptions(resolveOptions(panelAnswers))
+  finishScript()
 end
 
 local function initializePanel()

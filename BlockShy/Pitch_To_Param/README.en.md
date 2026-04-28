@@ -19,7 +19,7 @@ A custom parameter name can also be entered to try parameters supported by the c
 ## Usage
 
 1. Select one or more notes in the piano roll.
-2. Open the `Pitch to Parameter` panel in the Scripts side panel.
+2. SV2.1.2+: open the `Pitch to Parameter` panel in the Scripts side panel. SV1/older versions: run `Pitch to Parameter` from the script menu and fill in the legacy dialog.
 3. Choose a target parameter, or enter a custom parameter name.
 4. Choose the pitch source:
    - `Lightweight: note pitch + pitchDelta`: fast; includes note pitch, note detune, note group pitch offset, and `pitchDelta`.
@@ -35,12 +35,13 @@ A custom parameter name can also be entered to try parameters supported by the c
    - `Clear target parameter and rebuild`: removes all old target points before writing this result.
 7. Set sample interval, simplification threshold, center pitch, strength, and direction.
 8. Click `Refresh` to update the suggested center pitch from the current selection.
-9. Click `Run`.
+9. In SV2, click `Run`; in the SV1 dialog, click `OK`.
 
 ## Notes
 
 - Output values are clamped using the target parameter's official automation range instead of a fixed `-1.0` to `1.0` range.
-- This is a Synthesizer V Studio 2.1.2+ side-panel script and no longer runs from a top-menu modal dialog.
+- Synthesizer V Studio 2.1.2+ runs this as a side-panel script; SV1/older versions run it through a legacy `main()` dialog.
+- SV1 compatibility mode does not offer `Computed pitch (Studio 2)`; it only offers lightweight pitch and PitchDelta-only sources.
 - The panel title and UI text can switch between Chinese and English and default to Chinese; the host sidebar script-list name comes from static metadata and cannot follow the in-panel switch in real time.
 - The panel shows the full controls by default; the purpose/usage text is hidden by default and can be opened with `Show purpose & usage`.
 - The default write mode clears old target points inside selected note ranges, which makes repeated runs more predictable.
