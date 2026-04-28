@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Flatten Pitch Curve",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 5,
+    versionNumber = 6,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -674,6 +674,8 @@ local drawFlatPitchControlsValue = nil
 local flattenPitchDeltaValue = nil
 local clearPitchControlsValue = nil
 local protectOutsideValue = nil
+local introValue = nil
+local panelExpandedValue = nil
 local runButtonValue = nil
 local refreshButtonValue = nil
 local statusValue = nil
@@ -718,6 +720,10 @@ local function getWidgetValue(widgetValue, fallback)
   return value
 end
 
+local function isPanelExpanded()
+  return getWidgetValue(panelExpandedValue, false) == true
+end
+
 local function setWidgetValue(widgetValue, value)
   if widgetValue == nil then
     return
@@ -727,6 +733,39 @@ local function setWidgetValue(widgetValue, value)
     widgetValue:setValue(value)
     return true
   end)
+end
+
+local function setWidgetEnabled(widgetValue, enabled)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setEnabled(enabled)
+    return true
+  end)
+end
+
+local function refreshSidePanel()
+  safeCall(function()
+    SV:refreshSidePanel()
+    return true
+  end)
+end
+
+local function getIntroText()
+  local zh = "功能: 为选中音符或音符组绘制水平 Studio 2 Pitch Control Curve，"
+    .. "并可清理范围内的 pitchDelta 和旧音高控制。\n\n"
+    .. "用法: 选中音符或音符组，选择处理范围和清理选项，展开控制面板后点击“运行”。"
+  local en = "Purpose: Draw horizontal Studio 2 Pitch Control Curves for selected notes or note groups, "
+    .. "with optional pitchDelta and old pitch-control cleanup.\n\n"
+    .. "Usage: Select notes or note groups, choose the scope and cleanup options, "
+    .. "then expand controls and click Run."
+  return tr(zh, en)
+end
+
+local function updateIntro()
+  setWidgetValue(introValue, getIntroText())
 end
 
 local function setValueChangeCallback(widgetValue, callback)
@@ -906,9 +945,12 @@ local function initializePanel()
   flattenPitchDeltaValue = createWidgetValue(true)
   clearPitchControlsValue = createWidgetValue(true)
   protectOutsideValue = createWidgetValue(true)
+  introValue = createWidgetValue("")
+  panelExpandedValue = createWidgetValue(false)
   runButtonValue = createWidgetValue(false)
   refreshButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
+  setWidgetEnabled(introValue, false)
 
   setValueChangeCallback(runButtonValue, function()
     runPanel()
@@ -919,135 +961,160 @@ local function initializePanel()
   end)
 
   setValueChangeCallback(languageValue, function()
+    updateIntro()
     updateStatus()
-    safeCall(function()
-      SV:refreshSidePanel()
-      return true
-    end)
+    refreshSidePanel()
   end)
 
+  setValueChangeCallback(panelExpandedValue, function()
+    refreshSidePanel()
+  end)
+
+  updateIntro()
   updateStatus()
+end
+
+local function checkboxRow(text, value)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "CheckBox",
+        text = text,
+        value = value,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+local function appendRows(rows, newRows)
+  for _, row in ipairs(newRows) do
+    table.insert(rows, row)
+  end
+end
+
+local function buildBaseRows()
+  local expanded = isPanelExpanded()
+
+  return {
+    {
+      type = "Label",
+      text = tr("语言 / Language", "Language / 语言"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = { "中文", "English" },
+          value = languageValue,
+          width = 1.0,
+        },
+      },
+    },
+    {
+      type = "Label",
+      text = tr("功能与用法", "Purpose & Usage"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextArea",
+          value = introValue,
+          height = 128,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(
+      expanded and tr("收起控制面板", "Hide controls") or tr("展开控制面板", "Show controls"),
+      panelExpandedValue
+    ),
+  }
 end
 
 function getSidePanelSectionState()
   initializePanel()
 
-  return {
-    title = tr("音高曲线抹平", "Flatten Pitch Curve"),
-    rows = {
-      {
-        type = "Label",
-        text = tr("语言 / Language", "Language / 语言"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = { "中文", "English" },
-            value = languageValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("选择", "Selection"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "TextBox",
-            value = statusValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("处理范围", "Scope"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = {
-              tr("自动：优先音符", "Auto: prefer notes"),
-              tr("选中音符", "Selected notes"),
-              tr("选中音符组", "Selected note groups"),
-              tr("选中音符 + 音符组", "Selected notes + note groups"),
-            },
-            value = scopeValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "CheckBox",
-            text = tr("绘制水平 Studio 2 Pitch Control Curve", "Draw horizontal Studio 2 Pitch Control Curve"),
-            value = drawFlatPitchControlsValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "CheckBox",
-            text = tr("同时清零 pitchDelta 曲线", "Also reset the pitchDelta curve"),
-            value = flattenPitchDeltaValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "CheckBox",
-            text = tr(
-              "先移除范围内原有 Studio 2 音高控制",
-              "First remove existing Studio 2 pitch controls in range"
-            ),
-            value = clearPitchControlsValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "CheckBox",
-            text = tr("保护选区外相邻 pitchDelta 曲线", "Protect adjacent pitchDelta curve outside selection"),
-            value = protectOutsideValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "Button",
-            text = tr("刷新", "Refresh"),
-            value = refreshButtonValue,
-            width = 0.35,
-          },
-          {
-            type = "Button",
-            text = tr("运行", "Run"),
-            value = runButtonValue,
-            width = 0.65,
-          },
+  local rows = buildBaseRows()
+  if not isPanelExpanded() then
+    return {
+      title = tr("音高曲线抹平", "Flatten Pitch Curve"),
+      rows = rows,
+    }
+  end
+
+  appendRows(rows, {
+    {
+      type = "Label",
+      text = tr("选择", "Selection"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextBox",
+          value = statusValue,
+          width = 1.0,
         },
       },
     },
+    {
+      type = "Label",
+      text = tr("处理范围", "Scope"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = {
+            tr("自动：优先音符", "Auto: prefer notes"),
+            tr("选中音符", "Selected notes"),
+            tr("选中音符组", "Selected note groups"),
+            tr("选中音符 + 音符组", "Selected notes + note groups"),
+          },
+          value = scopeValue,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(
+      tr("绘制水平 Studio 2 Pitch Control Curve", "Draw horizontal Studio 2 Pitch Control Curve"),
+      drawFlatPitchControlsValue
+    ),
+    checkboxRow(tr("同时清零 pitchDelta 曲线", "Also reset the pitchDelta curve"), flattenPitchDeltaValue),
+    checkboxRow(
+      tr("先移除范围内原有 Studio 2 音高控制", "First remove existing Studio 2 pitch controls in range"),
+      clearPitchControlsValue
+    ),
+    checkboxRow(
+      tr("保护选区外相邻 pitchDelta 曲线", "Protect adjacent pitchDelta curve outside selection"),
+      protectOutsideValue
+    ),
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "Button",
+          text = tr("刷新", "Refresh"),
+          value = refreshButtonValue,
+          width = 0.35,
+        },
+        {
+          type = "Button",
+          text = tr("运行", "Run"),
+          value = runButtonValue,
+          width = 0.65,
+        },
+      },
+    },
+  })
+
+  return {
+    title = tr("音高曲线抹平", "Flatten Pitch Curve"),
+    rows = rows,
   }
 end

@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Pitch to Parameter",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 8,
+    versionNumber = 9,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -404,6 +404,8 @@ local centerPitchValue = nil
 local strengthValue = nil
 local directionValue = nil
 local languageValue = nil
+local introValue = nil
+local panelExpandedValue = nil
 local runButtonValue = nil
 local refreshButtonValue = nil
 local statusValue = nil
@@ -460,6 +462,10 @@ local function tr(zh, en)
   return zh
 end
 
+local function isPanelExpanded()
+  return getWidgetValue(panelExpandedValue, false) == true
+end
+
 local function setWidgetValue(widgetValue, value)
   if widgetValue == nil then
     return
@@ -469,6 +475,38 @@ local function setWidgetValue(widgetValue, value)
     widgetValue:setValue(value)
     return true
   end)
+end
+
+local function setWidgetEnabled(widgetValue, enabled)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setEnabled(enabled)
+    return true
+  end)
+end
+
+local function refreshSidePanel()
+  safeCall(function()
+    SV:refreshSidePanel()
+    return true
+  end)
+end
+
+local function getIntroText()
+  local zh = "功能: 将选中音符的音高、pitchDelta 或 Studio 2 计算后音高映射到张力、气声、响度等目标参数。\n\n"
+    .. "用法: 选中音符，选择目标参数、音高来源、点密度和写入模式，展开控制面板后点击“运行”。"
+  local en = "Purpose: Map selected-note pitch, pitchDelta, or Studio 2 computed pitch "
+    .. "into target parameters such as tension, breathiness, and loudness.\n\n"
+    .. "Usage: Select notes, choose the target parameter, pitch source, point density, "
+    .. "and write mode, then expand controls and click Run."
+  return tr(zh, en)
+end
+
+local function updateIntro()
+  setWidgetValue(introValue, getIntroText())
 end
 
 local function setValueChangeCallback(widgetValue, callback)
@@ -748,9 +786,12 @@ local function initializePanel()
   centerPitchValue = createWidgetValue(60)
   strengthValue = createWidgetValue(0.05)
   directionValue = createWidgetValue(0)
+  introValue = createWidgetValue("")
+  panelExpandedValue = createWidgetValue(false)
   runButtonValue = createWidgetValue(false)
   refreshButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
+  setWidgetEnabled(introValue, false)
 
   setValueChangeCallback(runButtonValue, function()
     runPanel()
@@ -761,13 +802,16 @@ local function initializePanel()
   end)
 
   setValueChangeCallback(languageValue, function()
+    updateIntro()
     updateStatus()
-    safeCall(function()
-      SV:refreshSidePanel()
-      return true
-    end)
+    refreshSidePanel()
   end)
 
+  setValueChangeCallback(panelExpandedValue, function()
+    refreshSidePanel()
+  end)
+
+  updateIntro()
   updateStatus()
 end
 
@@ -803,109 +847,165 @@ local function sliderRow(label, value, format, minValue, maxValue, interval)
   }
 end
 
-function getSidePanelSectionState()
-  initializePanel()
+local function checkboxRow(text, value)
+  return {
+    type = "Container",
+    columns = {
+      {
+        type = "CheckBox",
+        text = text,
+        value = value,
+        width = 1.0,
+      },
+    },
+  }
+end
+
+local function appendRows(rows, newRows)
+  for _, row in ipairs(newRows) do
+    table.insert(rows, row)
+  end
+end
+
+local function buildBaseRows()
+  local expanded = isPanelExpanded()
 
   return {
-    title = tr("音高转参数", "Pitch to Parameter"),
-    rows = {
-      {
-        type = "Label",
-        text = tr("语言 / Language", "Language / 语言"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = { "中文", "English" },
-            value = languageValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("选择", "Selection"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "TextBox",
-            value = statusValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("目标参数", "Target"),
-      },
-      comboRow(buildStaticParamLabels(), targetParamValue),
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "TextBox",
-            value = customParamValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("音高来源", "Source"),
-      },
-      comboRow({
-        tr("轻量：音符音高 + pitchDelta", "Lightweight: note pitch + pitchDelta"),
-        tr("仅跟随 pitchDelta", "PitchDelta only"),
-        tr("计算后音高 (Studio 2)", "Computed pitch (Studio 2)"),
-      }, sourceModeValue),
-      comboRow({
-        tr("智能精简", "Smart simplify"),
-        tr("保留全部采样点", "Keep all samples"),
-        tr("强制线性", "Force linear"),
-      }, densityModeValue),
-      comboRow({
-        tr("覆盖选中音符范围", "Overwrite selected note ranges"),
-        tr("仅追加/更新同位置点", "Append/update only"),
-        tr("清空目标参数后重建", "Clear target parameter and rebuild"),
-      }, writeModeValue),
-      comboRow({
-        tr("1/8 拍", "1/8 beat"),
-        tr("1/16 拍", "1/16 beat"),
-        tr("1/32 拍", "1/32 beat"),
-        tr("1/64 拍", "1/64 beat"),
-      }, sampleIntervalValue),
-      sliderRow(
-        tr("精简阈值 (% 参数范围)", "Simplify threshold (% parameter range)"),
-        simplifyPercentValue,
-        "%1.2f",
-        0.0,
-        5.0,
-        0.05
-      ),
-      sliderRow(tr("参考中心音高", "Reference center pitch"), centerPitchValue, "%1.0f", 36, 96, 1),
-      sliderRow(tr("映射强度", "Mapping strength"), strengthValue, "%1.2f", 0.01, 2.0, 0.01),
-      comboRow({ tr("正向", "Normal"), tr("反向", "Inverted") }, directionValue),
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "Button",
-            text = tr("刷新", "Refresh"),
-            value = refreshButtonValue,
-            width = 0.35,
-          },
-          {
-            type = "Button",
-            text = tr("运行", "Run"),
-            value = runButtonValue,
-            width = 0.65,
-          },
+    {
+      type = "Label",
+      text = tr("语言 / Language", "Language / 语言"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = { "中文", "English" },
+          value = languageValue,
+          width = 1.0,
         },
       },
     },
+    {
+      type = "Label",
+      text = tr("功能与用法", "Purpose & Usage"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextArea",
+          value = introValue,
+          height = 128,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(
+      expanded and tr("收起控制面板", "Hide controls") or tr("展开控制面板", "Show controls"),
+      panelExpandedValue
+    ),
+  }
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  local rows = buildBaseRows()
+  if not isPanelExpanded() then
+    return {
+      title = tr("音高转参数", "Pitch to Parameter"),
+      rows = rows,
+    }
+  end
+
+  appendRows(rows, {
+    {
+      type = "Label",
+      text = tr("选择", "Selection"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextBox",
+          value = statusValue,
+          width = 1.0,
+        },
+      },
+    },
+    {
+      type = "Label",
+      text = tr("目标参数", "Target"),
+    },
+    comboRow(buildStaticParamLabels(), targetParamValue),
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextBox",
+          value = customParamValue,
+          width = 1.0,
+        },
+      },
+    },
+    {
+      type = "Label",
+      text = tr("音高来源", "Source"),
+    },
+    comboRow({
+      tr("轻量：音符音高 + pitchDelta", "Lightweight: note pitch + pitchDelta"),
+      tr("仅跟随 pitchDelta", "PitchDelta only"),
+      tr("计算后音高 (Studio 2)", "Computed pitch (Studio 2)"),
+    }, sourceModeValue),
+    comboRow({
+      tr("智能精简", "Smart simplify"),
+      tr("保留全部采样点", "Keep all samples"),
+      tr("强制线性", "Force linear"),
+    }, densityModeValue),
+    comboRow({
+      tr("覆盖选中音符范围", "Overwrite selected note ranges"),
+      tr("仅追加/更新同位置点", "Append/update only"),
+      tr("清空目标参数后重建", "Clear target parameter and rebuild"),
+    }, writeModeValue),
+    comboRow({
+      tr("1/8 拍", "1/8 beat"),
+      tr("1/16 拍", "1/16 beat"),
+      tr("1/32 拍", "1/32 beat"),
+      tr("1/64 拍", "1/64 beat"),
+    }, sampleIntervalValue),
+    sliderRow(
+      tr("精简阈值 (% 参数范围)", "Simplify threshold (% parameter range)"),
+      simplifyPercentValue,
+      "%1.2f",
+      0.0,
+      5.0,
+      0.05
+    ),
+    sliderRow(tr("参考中心音高", "Reference center pitch"), centerPitchValue, "%1.0f", 36, 96, 1),
+    sliderRow(tr("映射强度", "Mapping strength"), strengthValue, "%1.2f", 0.01, 2.0, 0.01),
+    comboRow({ tr("正向", "Normal"), tr("反向", "Inverted") }, directionValue),
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "Button",
+          text = tr("刷新", "Refresh"),
+          value = refreshButtonValue,
+          width = 0.35,
+        },
+        {
+          type = "Button",
+          text = tr("运行", "Run"),
+          value = runButtonValue,
+          width = 0.65,
+        },
+      },
+    },
+  })
+
+  return {
+    title = tr("音高转参数", "Pitch to Parameter"),
+    rows = rows,
   }
 end

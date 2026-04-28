@@ -3,7 +3,7 @@ function getClientInfo()
     name = "Crying Effect",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 9,
+    versionNumber = 10,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -738,6 +738,8 @@ local dropStartPercentValue = nil
 local dropDepthValue = nil
 local dropLastNotesOnlyValue = nil
 local restorePitchValue = nil
+local introValue = nil
+local panelExpandedValue = nil
 local runButtonValue = nil
 local refreshButtonValue = nil
 local statusValue = nil
@@ -782,6 +784,10 @@ local function getWidgetValue(widgetValue, fallback)
   return value
 end
 
+local function isPanelExpanded()
+  return getWidgetValue(panelExpandedValue, false) == true
+end
+
 local function setWidgetValue(widgetValue, value)
   if widgetValue == nil then
     return
@@ -791,6 +797,38 @@ local function setWidgetValue(widgetValue, value)
     widgetValue:setValue(value)
     return true
   end)
+end
+
+local function setWidgetEnabled(widgetValue, enabled)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setEnabled(enabled)
+    return true
+  end)
+end
+
+local function refreshSidePanel()
+  safeCall(function()
+    SV:refreshSidePanel()
+    return true
+  end)
+end
+
+local function getIntroText()
+  local zh = "功能: 为选中音符生成哭腔风格的颤音包络、气声、张力和音高哭腔/尾部下坠。\n\n"
+    .. "用法: 在钢琴窗选中音符，选择哭腔预设、强度和写入模式，展开控制面板后点击“运行”。"
+  local en = "Purpose: Generate crying-style vibrato envelope, breathiness, tension, "
+    .. "and pitch cry / tail-drop gestures for selected notes.\n\n"
+    .. "Usage: Select notes in the piano roll, choose a preset, strength, and write mode, "
+    .. "then expand controls and click Run."
+  return tr(zh, en)
+end
+
+local function updateIntro()
+  setWidgetValue(introValue, getIntroText())
 end
 
 local function setValueChangeCallback(widgetValue, callback)
@@ -944,9 +982,12 @@ local function initializePanel()
   dropDepthValue = createWidgetValue(150)
   dropLastNotesOnlyValue = createWidgetValue(false)
   restorePitchValue = createWidgetValue(false)
+  introValue = createWidgetValue("")
+  panelExpandedValue = createWidgetValue(false)
   runButtonValue = createWidgetValue(false)
   refreshButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
+  setWidgetEnabled(introValue, false)
 
   setValueChangeCallback(runButtonValue, function()
     runPanel()
@@ -957,13 +998,16 @@ local function initializePanel()
   end)
 
   setValueChangeCallback(languageValue, function()
+    updateIntro()
     updateStatus()
-    safeCall(function()
-      SV:refreshSidePanel()
-      return true
-    end)
+    refreshSidePanel()
   end)
 
+  setValueChangeCallback(panelExpandedValue, function()
+    refreshSidePanel()
+  end)
+
+  updateIntro()
   updateStatus()
 end
 
@@ -999,109 +1043,151 @@ local function sliderRow(label, value, format, minValue, maxValue, interval)
   }
 end
 
-function getSidePanelSectionState()
-  initializePanel()
+local function appendRows(rows, newRows)
+  for _, row in ipairs(newRows) do
+    table.insert(rows, row)
+  end
+end
+
+local function buildBaseRows()
+  local expanded = isPanelExpanded()
 
   return {
-    title = tr("哭腔效果", "Crying Effect"),
-    rows = {
-      {
-        type = "Label",
-        text = tr("语言 / Language", "Language / 语言"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = { "中文", "English" },
-            value = languageValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("选择", "Selection"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "TextBox",
-            value = statusValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("预设", "Preset"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = buildPresetChoices(),
-            value = presetValue,
-            width = 1.0,
-          },
-        },
-      },
-      sliderRow(tr("预设强度倍率", "Preset strength"), intensityValue, "%1.1f", 0.5, 1.6, 0.1),
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = {
-              tr("覆盖选中音符范围", "Overwrite selected note ranges"),
-              tr("仅追加/更新同位置点", "Append/update only"),
-              tr("清空已启用参数后重建", "Clear enabled parameters and rebuild"),
-            },
-            value = writeModeValue,
-            width = 1.0,
-          },
-        },
-      },
-      checkboxRow(tr("添加颤音包络", "Add vibrato envelope"), addVibratoValue),
-      checkboxRow(tr("添加气声", "Add breathiness"), addBreathValue),
-      checkboxRow(tr("添加张力", "Add tension"), addTensionValue),
-      checkboxRow(tr("添加音高哭腔/尾部下坠", "Add pitch cry / tail drop"), addPitchDropValue),
-      {
-        type = "Label",
-        text = tr("自定义包络", "Custom Envelope"),
-      },
-      sliderRow(tr("起势位置 (%)", "Attack position (%)"), attackPercentValue, "%1.0f", 0, 40, 1),
-      sliderRow(tr("峰值位置 (%)", "Peak position (%)"), peakPercentValue, "%1.0f", 20, 80, 1),
-      sliderRow(tr("回落位置 (%)", "Release position (%)"), releasePercentValue, "%1.0f", 60, 100, 1),
-      sliderRow(tr("张力随机量", "Tension randomness"), randomAmountValue, "%1.2f", 0, 0.4, 0.01),
-      checkboxRow(tr("固定随机结果", "Fixed random output"), fixedRandomValue),
-      sliderRow(tr("下坠开始位置 (%)", "Drop start position (%)"), dropStartPercentValue, "%1.0f", 40, 95, 1),
-      sliderRow(tr("下坠深度 (cents)", "Drop depth (cents)"), dropDepthValue, "%1.0f", 20, 400, 5),
-      checkboxRow(
-        tr("仅对每段选区最后一个音符添加下坠", "Apply drop only to the last note in each range"),
-        dropLastNotesOnlyValue
-      ),
-      checkboxRow(tr("尾后恢复音高偏移", "Restore pitch after tail"), restorePitchValue),
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "Button",
-            text = tr("刷新", "Refresh"),
-            value = refreshButtonValue,
-            width = 0.35,
-          },
-          {
-            type = "Button",
-            text = tr("运行", "Run"),
-            value = runButtonValue,
-            width = 0.65,
-          },
+    {
+      type = "Label",
+      text = tr("语言 / Language", "Language / 语言"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = { "中文", "English" },
+          value = languageValue,
+          width = 1.0,
         },
       },
     },
+    {
+      type = "Label",
+      text = tr("功能与用法", "Purpose & Usage"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextArea",
+          value = introValue,
+          height = 128,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(
+      expanded and tr("收起控制面板", "Hide controls") or tr("展开控制面板", "Show controls"),
+      panelExpandedValue
+    ),
+  }
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  local rows = buildBaseRows()
+  if not isPanelExpanded() then
+    return {
+      title = tr("哭腔效果", "Crying Effect"),
+      rows = rows,
+    }
+  end
+
+  appendRows(rows, {
+    {
+      type = "Label",
+      text = tr("选择", "Selection"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextBox",
+          value = statusValue,
+          width = 1.0,
+        },
+      },
+    },
+    {
+      type = "Label",
+      text = tr("预设", "Preset"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = buildPresetChoices(),
+          value = presetValue,
+          width = 1.0,
+        },
+      },
+    },
+    sliderRow(tr("预设强度倍率", "Preset strength"), intensityValue, "%1.1f", 0.5, 1.6, 0.1),
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = {
+            tr("覆盖选中音符范围", "Overwrite selected note ranges"),
+            tr("仅追加/更新同位置点", "Append/update only"),
+            tr("清空已启用参数后重建", "Clear enabled parameters and rebuild"),
+          },
+          value = writeModeValue,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(tr("添加颤音包络", "Add vibrato envelope"), addVibratoValue),
+    checkboxRow(tr("添加气声", "Add breathiness"), addBreathValue),
+    checkboxRow(tr("添加张力", "Add tension"), addTensionValue),
+    checkboxRow(tr("添加音高哭腔/尾部下坠", "Add pitch cry / tail drop"), addPitchDropValue),
+    {
+      type = "Label",
+      text = tr("自定义包络", "Custom Envelope"),
+    },
+    sliderRow(tr("起势位置 (%)", "Attack position (%)"), attackPercentValue, "%1.0f", 0, 40, 1),
+    sliderRow(tr("峰值位置 (%)", "Peak position (%)"), peakPercentValue, "%1.0f", 20, 80, 1),
+    sliderRow(tr("回落位置 (%)", "Release position (%)"), releasePercentValue, "%1.0f", 60, 100, 1),
+    sliderRow(tr("张力随机量", "Tension randomness"), randomAmountValue, "%1.2f", 0, 0.4, 0.01),
+    checkboxRow(tr("固定随机结果", "Fixed random output"), fixedRandomValue),
+    sliderRow(tr("下坠开始位置 (%)", "Drop start position (%)"), dropStartPercentValue, "%1.0f", 40, 95, 1),
+    sliderRow(tr("下坠深度 (cents)", "Drop depth (cents)"), dropDepthValue, "%1.0f", 20, 400, 5),
+    checkboxRow(
+      tr("仅对每段选区最后一个音符添加下坠", "Apply drop only to the last note in each range"),
+      dropLastNotesOnlyValue
+    ),
+    checkboxRow(tr("尾后恢复音高偏移", "Restore pitch after tail"), restorePitchValue),
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "Button",
+          text = tr("刷新", "Refresh"),
+          value = refreshButtonValue,
+          width = 0.35,
+        },
+        {
+          type = "Button",
+          text = tr("运行", "Run"),
+          value = runButtonValue,
+          width = 0.65,
+        },
+      },
+    },
+  })
+
+  return {
+    title = tr("哭腔效果", "Crying Effect"),
+    rows = rows,
   }
 end

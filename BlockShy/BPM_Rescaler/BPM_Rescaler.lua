@@ -3,7 +3,7 @@ function getClientInfo()
     name = "BPM Rescaler",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 9,
+    versionNumber = 10,
     minEditorVersion = 131330,
     type = "SidePanelSection",
   }
@@ -319,6 +319,8 @@ local anchorModeValue = nil
 local processAutomationValue = nil
 local processPitchControlsValue = nil
 local languageValue = nil
+local introValue = nil
+local panelExpandedValue = nil
 local runButtonValue = nil
 local detectButtonValue = nil
 local statusValue = nil
@@ -375,6 +377,10 @@ local function tr(zh, en)
   return zh
 end
 
+local function isPanelExpanded()
+  return getWidgetValue(panelExpandedValue, false) == true
+end
+
 local function setWidgetValue(widgetValue, value)
   if widgetValue == nil then
     return
@@ -384,6 +390,38 @@ local function setWidgetValue(widgetValue, value)
     widgetValue:setValue(value)
     return true
   end)
+end
+
+local function setWidgetEnabled(widgetValue, enabled)
+  if widgetValue == nil then
+    return
+  end
+
+  safeCall(function()
+    widgetValue:setEnabled(enabled)
+    return true
+  end)
+end
+
+local function refreshSidePanel()
+  safeCall(function()
+    SV:refreshSidePanel()
+    return true
+  end)
+end
+
+local function getIntroText()
+  local zh = "功能: 按“当前 BPM / 原始 BPM”重缩放当前音符组目标内的音符、参数曲线和 Studio 2 音高控制。\n\n"
+    .. "用法: 选中轨道或音符组，检测或填写 BPM，选择锚点和处理项，展开控制面板后点击“运行”。"
+  local en = "Purpose: Rescale notes, automation, and Studio 2 pitch controls "
+    .. "in the current note group target by current BPM / original BPM.\n\n"
+    .. "Usage: Select a track or note group, detect or enter BPM values, "
+    .. "choose the anchor and processing options, then expand controls and click Run."
+  return tr(zh, en)
+end
+
+local function updateIntro()
+  setWidgetValue(introValue, getIntroText())
 end
 
 local function setValueChangeCallback(widgetValue, callback)
@@ -579,9 +617,12 @@ local function initializePanel()
   processAutomationValue = createWidgetValue(true)
   processPitchControlsValue = createWidgetValue(true)
   languageValue = createWidgetValue(0)
+  introValue = createWidgetValue("")
+  panelExpandedValue = createWidgetValue(false)
   runButtonValue = createWidgetValue(false)
   detectButtonValue = createWidgetValue(false)
   statusValue = createWidgetValue("")
+  setWidgetEnabled(introValue, false)
 
   setValueChangeCallback(runButtonValue, function()
     runPanel()
@@ -592,13 +633,16 @@ local function initializePanel()
   end)
 
   setValueChangeCallback(languageValue, function()
+    updateIntro()
     refreshDetectedBpm()
-    safeCall(function()
-      SV:refreshSidePanel()
-      return true
-    end)
+    refreshSidePanel()
   end)
 
+  setValueChangeCallback(panelExpandedValue, function()
+    refreshSidePanel()
+  end)
+
+  updateIntro()
   refreshDetectedBpm()
 end
 
@@ -629,82 +673,124 @@ local function checkboxRow(text, value)
   }
 end
 
-function getSidePanelSectionState()
-  initializePanel()
+local function appendRows(rows, newRows)
+  for _, row in ipairs(newRows) do
+    table.insert(rows, row)
+  end
+end
+
+local function buildBaseRows()
+  local expanded = isPanelExpanded()
 
   return {
-    title = tr("BPM 重缩放", "BPM Rescaler"),
-    rows = {
-      {
-        type = "Label",
-        text = tr("语言 / Language", "Language / 语言"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = { "中文", "English" },
-            value = languageValue,
-            width = 1.0,
-          },
-        },
-      },
-      {
-        type = "Label",
-        text = tr("状态", "Status"),
-      },
-      textBoxRow(statusValue),
-      {
-        type = "Label",
-        text = tr("当前 BPM", "Current BPM"),
-      },
-      textBoxRow(currentBpmValue),
-      {
-        type = "Label",
-        text = tr("原始 BPM", "Original BPM"),
-      },
-      textBoxRow(originalBpmValue),
-      {
-        type = "Label",
-        text = tr("缩放锚点", "Anchor"),
-      },
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "ComboBox",
-            choices = {
-              tr("音符组内部 0 位置", "Note group local 0"),
-              tr("第一个音符起点", "First note onset"),
-            },
-            value = anchorModeValue,
-            width = 1.0,
-          },
-        },
-      },
-      checkboxRow(tr("同时缩放参数曲线", "Also rescale automation"), processAutomationValue),
-      checkboxRow(
-        tr("同时缩放 Studio 2 音高控制点/曲线", "Also rescale Studio 2 pitch controls"),
-        processPitchControlsValue
-      ),
-      {
-        type = "Container",
-        columns = {
-          {
-            type = "Button",
-            text = tr("检测 BPM", "Detect BPM"),
-            value = detectButtonValue,
-            width = 0.45,
-          },
-          {
-            type = "Button",
-            text = tr("运行", "Run"),
-            value = runButtonValue,
-            width = 0.55,
-          },
+    {
+      type = "Label",
+      text = tr("语言 / Language", "Language / 语言"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = { "中文", "English" },
+          value = languageValue,
+          width = 1.0,
         },
       },
     },
+    {
+      type = "Label",
+      text = tr("功能与用法", "Purpose & Usage"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "TextArea",
+          value = introValue,
+          height = 128,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(
+      expanded and tr("收起控制面板", "Hide controls") or tr("展开控制面板", "Show controls"),
+      panelExpandedValue
+    ),
+  }
+end
+
+function getSidePanelSectionState()
+  initializePanel()
+
+  local rows = buildBaseRows()
+  if not isPanelExpanded() then
+    return {
+      title = tr("BPM 重缩放", "BPM Rescaler"),
+      rows = rows,
+    }
+  end
+
+  appendRows(rows, {
+    {
+      type = "Label",
+      text = tr("状态", "Status"),
+    },
+    textBoxRow(statusValue),
+    {
+      type = "Label",
+      text = tr("当前 BPM", "Current BPM"),
+    },
+    textBoxRow(currentBpmValue),
+    {
+      type = "Label",
+      text = tr("原始 BPM", "Original BPM"),
+    },
+    textBoxRow(originalBpmValue),
+    {
+      type = "Label",
+      text = tr("缩放锚点", "Anchor"),
+    },
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "ComboBox",
+          choices = {
+            tr("音符组内部 0 位置", "Note group local 0"),
+            tr("第一个音符起点", "First note onset"),
+          },
+          value = anchorModeValue,
+          width = 1.0,
+        },
+      },
+    },
+    checkboxRow(tr("同时缩放参数曲线", "Also rescale automation"), processAutomationValue),
+    checkboxRow(
+      tr("同时缩放 Studio 2 音高控制点/曲线", "Also rescale Studio 2 pitch controls"),
+      processPitchControlsValue
+    ),
+    {
+      type = "Container",
+      columns = {
+        {
+          type = "Button",
+          text = tr("检测 BPM", "Detect BPM"),
+          value = detectButtonValue,
+          width = 0.45,
+        },
+        {
+          type = "Button",
+          text = tr("运行", "Run"),
+          value = runButtonValue,
+          width = 0.55,
+        },
+      },
+    },
+  })
+
+  return {
+    title = tr("BPM 重缩放", "BPM Rescaler"),
+    rows = rows,
   }
 end
