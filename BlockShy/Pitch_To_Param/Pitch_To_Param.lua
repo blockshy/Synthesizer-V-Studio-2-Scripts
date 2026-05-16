@@ -21,7 +21,7 @@ function getClientInfo()
     name = "Pitch to Parameter",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 11,
+    versionNumber = 12,
     minEditorVersion = 0,
   }
 
@@ -37,10 +37,15 @@ local TARGET_PARAM_CANDIDATES = {
   { typeName = "tension", label = "Tension (张力)" },
   { typeName = "breathiness", label = "Breathiness (气声)" },
   { typeName = "gender", label = "Gender (性别)" },
-  { typeName = "voicing", label = "Voicing (清浊)" },
+  { typeName = "voicing", label = "Voicing (发声)" },
   { typeName = "vibratoEnv", label = "Vibrato Envelope (颤音包络)" },
   { typeName = "loudness", label = "Loudness (响度)" },
-  { typeName = "toneShift", label = "Tone Shift (音色，兼容性尝试)" },
+  {
+    typeName = "toneShift",
+    label = "Tone Shift (声区转换)",
+    fallbackVoiceProperty = "paramToneShift",
+    fallbackRange = { -800, 800 },
+  },
 }
 
 local SOURCE_MODE_BEND_ONLY = 1
@@ -77,6 +82,26 @@ local function trim(value)
   return tostring(value or ""):match("^%s*(.-)%s*$")
 end
 
+local function normalizeParamType(value)
+  return trim(value):lower()
+end
+
+local function isSameParamType(left, right)
+  return normalizeParamType(left) == normalizeParamType(right)
+end
+
+local function isVocalModeParamName(value)
+  return normalizeParamType(value):sub(1, 10) == "vocalmode_"
+end
+
+local function isMatchingParamType(actualTypeName, requestedTypeName)
+  if isSameParamType(actualTypeName, requestedTypeName) then
+    return true
+  end
+
+  return isVocalModeParamName(requestedTypeName) and normalizeParamType(actualTypeName) == "vocalmode_name"
+end
+
 local function getParameterSafe(group, typeName)
   return safeCall(function()
     return group:getParameter(typeName)
@@ -95,11 +120,54 @@ local function getAutomationDefinition(param)
   return definition
 end
 
-local function getParamRange(param)
+local function getAutomationTypeName(param)
+  local typeName = safeCall(function()
+    return param:getType()
+  end)
+
+  if type(typeName) == "string" and trim(typeName) ~= "" then
+    return typeName
+  end
+
+  local definition = getAutomationDefinition(param)
+  if type(definition) == "table" and type(definition.typeName) == "string" then
+    return definition.typeName
+  end
+
+  return nil
+end
+
+local function getValidatedParameter(group, typeName)
+  local param = getParameterSafe(group, typeName)
+  if param == nil then
+    return nil, nil
+  end
+
+  local actualTypeName = getAutomationTypeName(param)
+  if actualTypeName == nil then
+    return param, typeName
+  end
+
+  if isMatchingParamType(actualTypeName, typeName) then
+    return param, actualTypeName
+  end
+
+  return nil, actualTypeName
+end
+
+local function getParamRange(param, fallbackRange)
   local definition = getAutomationDefinition(param)
   if type(definition) == "table" and type(definition.range) == "table" then
     local minValue = definition.range[1] or definition.range.min
     local maxValue = definition.range[2] or definition.range.max
+    if type(minValue) == "number" and type(maxValue) == "number" then
+      return minValue, maxValue, definition
+    end
+  end
+
+  if type(fallbackRange) == "table" then
+    local minValue = fallbackRange[1] or fallbackRange.min
+    local maxValue = fallbackRange[2] or fallbackRange.max
     if type(minValue) == "number" and type(maxValue) == "number" then
       return minValue, maxValue, definition
     end
@@ -622,10 +690,30 @@ local function updateStatus()
   )
 end
 
-local function resolveTargetParamName()
+local function buildTargetTypeNames(targetSpec)
+  local names = {}
+  local typeName = trim(targetSpec and targetSpec.typeName)
+  if typeName == "" then
+    return names
+  end
+
+  table.insert(names, typeName)
+
+  if targetSpec.isCustom and not isVocalModeParamName(typeName) then
+    table.insert(names, "vocalMode_" .. typeName)
+  end
+
+  return names
+end
+
+local function resolveTargetSpec()
   local customParam = trim(getWidgetValue(customParamValue, ""))
   if customParam ~= "" then
-    return customParam
+    return {
+      typeName = customParam,
+      isCustom = true,
+      displayName = customParam,
+    }
   end
 
   local targetIndex = getWidgetValue(targetParamValue, 0) or 0
@@ -638,7 +726,94 @@ local function resolveTargetParamName()
     return nil
   end
 
-  return candidate.typeName
+  return {
+    typeName = candidate.typeName,
+    isCustom = false,
+    displayName = candidate.label,
+    candidate = candidate,
+  }
+end
+
+local function resolveTarget(groupTarget, currentGroup, targetSpec)
+  local typeNames = buildTargetTypeNames(targetSpec)
+  for _, typeName in ipairs(typeNames) do
+    local param, actualTypeName = getValidatedParameter(groupTarget, typeName)
+    if param ~= nil then
+      local displayTypeName = actualTypeName or typeName
+      if isVocalModeParamName(typeName) and isSameParamType(displayTypeName, "vocalMode_Name") then
+        displayTypeName = typeName
+      end
+
+      return {
+        kind = "automation",
+        param = param,
+        typeName = displayTypeName,
+        requestedTypeName = typeName,
+        displayName = targetSpec.displayName or typeName,
+        fallbackRange = targetSpec.candidate and targetSpec.candidate.fallbackRange,
+      }
+    end
+  end
+
+  local candidate = targetSpec and targetSpec.candidate
+  if candidate and candidate.fallbackVoiceProperty then
+    local voice = safeCall(function()
+      return currentGroup:getVoice()
+    end)
+
+    if type(voice) == "table" and type(voice[candidate.fallbackVoiceProperty]) == "number" then
+      return {
+        kind = "voiceProperty",
+        typeName = candidate.typeName,
+        displayName = candidate.label,
+        voiceProperty = candidate.fallbackVoiceProperty,
+        fallbackRange = candidate.fallbackRange,
+        currentValue = voice[candidate.fallbackVoiceProperty],
+      }
+    end
+  end
+
+  return nil
+end
+
+local function getTargetParamRange(target)
+  if target.kind == "voiceProperty" then
+    local fallbackRange = target.fallbackRange or { -1.0, 1.0 }
+    return fallbackRange[1], fallbackRange[2], nil
+  end
+
+  return getParamRange(target.param, target.fallbackRange)
+end
+
+local function getTargetDisplayName(target, targetDefinition)
+  if targetDefinition and targetDefinition.displayName then
+    return targetDefinition.displayName .. " (" .. target.typeName .. ")"
+  end
+
+  return target.displayName or target.typeName
+end
+
+local function getAverageGeneratedValue(points)
+  if #points == 0 then
+    return nil
+  end
+
+  local total = 0
+  for _, point in ipairs(points) do
+    total = total + point.value
+  end
+
+  return total / #points
+end
+
+local function writeVoiceProperty(groupReference, propertyName, value)
+  local voiceUpdate = {}
+  voiceUpdate[propertyName] = value
+
+  return safeCall(function()
+    groupReference:setVoice(voiceUpdate)
+    return true
+  end) == true
 end
 
 local function runPitchOptions(options)
@@ -697,8 +872,16 @@ local function runPitchOptions(options)
     return
   end
 
-  local targetParamName = options.targetParamName
-  if targetParamName == nil then
+  local targetSpec = options.targetSpec
+  if targetSpec == nil and options.targetParamName ~= nil then
+    targetSpec = {
+      typeName = options.targetParamName,
+      isCustom = options.isCustomTarget == true,
+      displayName = options.targetParamName,
+    }
+  end
+
+  if targetSpec == nil or trim(targetSpec.typeName) == "" then
     showMessage(
       tr("错误", "Error"),
       tr("选择自定义参数时必须填写参数名。", "A parameter name is required when Custom is selected.")
@@ -707,17 +890,23 @@ local function runPitchOptions(options)
     return
   end
 
-  local targetParam = getParameterSafe(groupTarget, targetParamName)
-  if targetParam == nil then
+  local target = resolveTarget(groupTarget, currentGroup, targetSpec)
+  if target == nil then
     showMessage(
       tr("错误", "Error"),
-      tr("目标参数不可用: ", "Target parameter is unavailable: ") .. targetParamName
+      tr("目标参数不可用: ", "Target parameter is unavailable: ")
+        .. trim(targetSpec.typeName)
+        .. tr(
+          "\n\n声线参数请填写唱法名称，例如 Cool 或 Dark；脚本会自动尝试 vocalMode_Cool / vocalMode_Dark。",
+          "\n\nFor vocal-mode parameters, enter the singing-style name, for example Cool or Dark; "
+            .. "the script will try vocalMode_Cool / vocalMode_Dark automatically."
+        )
     )
     isRunning = false
     return
   end
 
-  local targetMin, targetMax, targetDefinition = getParamRange(targetParam)
+  local targetMin, targetMax, targetDefinition = getTargetParamRange(target)
   local targetRange = targetMax - targetMin
   local sampleDenominator = SAMPLE_DENOMINATORS[(options.sampleInterval or 2) + 1] or 32
   local step = math.floor((SV.QUARTER or 705600000) / sampleDenominator)
@@ -770,23 +959,74 @@ local function runPitchOptions(options)
     return true
   end)
 
+  local targetDisplayName = getTargetDisplayName(target, targetDefinition)
+  if target.kind == "voiceProperty" then
+    local voiceValue = getAverageGeneratedValue(points)
+    if voiceValue == nil then
+      showMessage(tr("提示", "Notice"), tr("没有生成任何参数值。", "No parameter value was generated."))
+      isRunning = false
+      return
+    end
+
+    if not writeVoiceProperty(currentGroup, target.voiceProperty, voiceValue) then
+      showMessage(
+        tr("错误", "Error"),
+        tr("无法写入音符组声线属性: ", "Unable to write note-group voice property: ") .. target.voiceProperty
+      )
+      isRunning = false
+      return
+    end
+
+    local summary = tr("映射完成。\n", "Mapping complete.\n")
+      .. tr("目标参数: ", "Target parameter: ")
+      .. targetDisplayName
+      .. tr("\n写入方式: 音符组声线属性平均值", "\nWrite path: note-group voice property average")
+      .. tr("\n选中音符: ", "\nSelected notes: ")
+      .. #selectedNotes
+      .. tr("\n采样点: ", "\nSampled points: ")
+      .. pointStats.sampledPoints
+      .. tr("\n生成点: ", "\nGenerated points: ")
+      .. #points
+      .. tr("\n原值: ", "\nPrevious value: ")
+      .. string.format("%1.2f", target.currentValue or 0)
+      .. tr("\n新值: ", "\nNew value: ")
+      .. string.format("%1.2f", voiceValue)
+      .. tr(
+        "\n\n注意: 当前宿主未提供声区转换自动化曲线，脚本已通过 NoteGroupReference:setVoice() 写入当前音符组引用的声线属性；写入模式和选中范围清理不适用于该回退路径。",
+        "\n\nNote: The current host did not expose Tone Shift automation, so the script wrote the current "
+          .. "note-group reference voice property through NoteGroupReference:setVoice(). Write mode and "
+          .. "selected-range cleanup do not apply to this fallback path."
+      )
+
+    if pointStats.collisions > 0 then
+      summary = summary .. tr("\n合并同位置点: ", "\nMerged same-position points: ") .. pointStats.collisions
+    end
+
+    if pointStats.computedFallbacks > 0 then
+      summary = summary
+        .. tr("\n计算后音高缺失采样: ", "\nComputed-pitch fallback samples: ")
+        .. pointStats.computedFallbacks
+        .. tr("，已回退到轻量音高。", "; fell back to lightweight pitch.")
+    end
+
+    showMessage(tr("完成", "Done"), summary)
+    updateStatus()
+    isRunning = false
+    return
+  end
+
   local writeMode = options.writeMode or 0
   local removedPoints = 0
 
   if writeMode == WRITE_REBUILD_TARGET then
-    removedPoints = clearAllPoints(targetParam)
+    removedPoints = clearAllPoints(target.param)
   elseif writeMode == WRITE_OVERWRITE_RANGES then
-    removedPoints = clearRanges(targetParam, ranges)
+    removedPoints = clearRanges(target.param, ranges)
   elseif writeMode ~= WRITE_APPEND_ONLY then
-    removedPoints = clearRanges(targetParam, ranges)
+    removedPoints = clearRanges(target.param, ranges)
   end
 
-  local createdPoints, updatedPoints = writeGeneratedPoints(targetParam, points)
-  local targetDisplayName = targetParamName
-  if targetDefinition and targetDefinition.displayName then
-    targetDisplayName = targetDefinition.displayName .. " (" .. targetParamName .. ")"
-  end
-
+  local createdPoints, updatedPoints = writeGeneratedPoints(target.param, points)
   local summary = tr("映射完成。\n", "Mapping complete.\n")
     .. tr("目标参数: ", "Target parameter: ")
     .. targetDisplayName
@@ -832,7 +1072,7 @@ end
 
 local function runPanel()
   runPitchOptions({
-    targetParamName = resolveTargetParamName(),
+    targetSpec = resolveTargetSpec(),
     sourceMode = getWidgetValue(sourceModeValue, 0),
     densityMode = getWidgetValue(densityModeValue, 0),
     writeMode = getWidgetValue(writeModeValue, 0),
@@ -863,10 +1103,14 @@ local function finishScript()
   end)
 end
 
-local function resolveLegacyTargetParamName(answers)
+local function resolveLegacyTargetSpec(answers)
   local customParam = trim(answers.customParam)
   if customParam ~= "" then
-    return customParam
+    return {
+      typeName = customParam,
+      isCustom = true,
+      displayName = customParam,
+    }
   end
 
   local targetIndex = tonumber(answers.targetParam) or 0
@@ -879,7 +1123,12 @@ local function resolveLegacyTargetParamName(answers)
     return nil
   end
 
-  return candidate.typeName
+  return {
+    typeName = candidate.typeName,
+    isCustom = false,
+    displayName = candidate.label,
+    candidate = candidate,
+  }
 end
 
 function main()
@@ -910,7 +1159,7 @@ function main()
       {
         name = "customParam",
         type = "TextBox",
-        label = "自定义参数名 / Custom parameter name",
+        label = "自定义参数名或唱法名 / Custom parameter or vocal mode name",
         default = "",
       },
       {
@@ -975,10 +1224,10 @@ function main()
       {
         name = "strength",
         type = "Slider",
-        label = "映射强度 / Mapping strength",
+        label = "映射强度（每半音参数单位） / Mapping strength (parameter units per semitone)",
         format = "%1.2f",
         minValue = 0.01,
-        maxValue = 2.0,
+        maxValue = 200.0,
         interval = 0.01,
         default = 0.05,
       },
@@ -1000,7 +1249,7 @@ function main()
 
   legacyLanguageValue = tonumber(answers.language) or 0
   runPitchOptions({
-    targetParamName = resolveLegacyTargetParamName(answers),
+    targetSpec = resolveLegacyTargetSpec(answers),
     sourceMode = tonumber(answers.sourceMode) or 0,
     densityMode = tonumber(answers.densityMode) or 0,
     writeMode = tonumber(answers.writeMode) or 0,
@@ -1183,6 +1432,10 @@ function getSidePanelSectionState()
     },
     comboRow(buildStaticParamLabels(), targetParamValue),
     {
+      type = "Label",
+      text = tr("自定义参数名或唱法名", "Custom parameter or vocal mode name"),
+    },
+    {
       type = "Container",
       columns = {
         {
@@ -1201,16 +1454,28 @@ function getSidePanelSectionState()
       tr("仅跟随 pitchDelta", "PitchDelta only"),
       tr("计算后音高 (Studio 2)", "Computed pitch (Studio 2)"),
     }, sourceModeValue),
+    {
+      type = "Label",
+      text = tr("点密度", "Point Density"),
+    },
     comboRow({
       tr("智能精简", "Smart simplify"),
       tr("保留全部采样点", "Keep all samples"),
       tr("强制线性", "Force linear"),
     }, densityModeValue),
+    {
+      type = "Label",
+      text = tr("写入模式", "Write Mode"),
+    },
     comboRow({
       tr("覆盖选中音符范围", "Overwrite selected note ranges"),
       tr("仅追加/更新同位置点", "Append/update only"),
       tr("清空目标参数后重建", "Clear target parameter and rebuild"),
     }, writeModeValue),
+    {
+      type = "Label",
+      text = tr("采样间隔", "Sample Interval"),
+    },
     comboRow({
       tr("1/8 拍", "1/8 beat"),
       tr("1/16 拍", "1/16 beat"),
@@ -1226,7 +1491,18 @@ function getSidePanelSectionState()
       0.05
     ),
     sliderRow(tr("参考中心音高", "Reference center pitch"), centerPitchValue, "%1.0f", 36, 96, 1),
-    sliderRow(tr("映射强度", "Mapping strength"), strengthValue, "%1.2f", 0.01, 2.0, 0.01),
+    sliderRow(
+      tr("映射强度（每半音参数单位）", "Mapping strength (parameter units per semitone)"),
+      strengthValue,
+      "%1.2f",
+      0.01,
+      200.0,
+      0.01
+    ),
+    {
+      type = "Label",
+      text = tr("方向", "Direction"),
+    },
     comboRow({ tr("正向", "Normal"), tr("反向", "Inverted") }, directionValue),
     {
       type = "Container",
