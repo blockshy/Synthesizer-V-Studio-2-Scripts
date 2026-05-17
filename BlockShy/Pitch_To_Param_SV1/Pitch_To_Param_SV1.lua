@@ -1,36 +1,11 @@
-local SIDE_PANEL_MIN_VERSION = 131330
-
-local function getHostVersionNumber()
-  local ok, hostInfo = pcall(function()
-    return SV:getHostInfo()
-  end)
-
-  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
-    return hostInfo.hostVersionNumber
-  end
-
-  return 0
-end
-
-local function isSidePanelHost()
-  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
-end
-
 function getClientInfo()
-  local info = {
-    name = "Pitch to Parameter",
+  return {
+    name = "Pitch to Parameter (SV1)",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 12,
+    versionNumber = 13,
     minEditorVersion = 0,
   }
-
-  if isSidePanelHost() then
-    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
-    info.type = "SidePanelSection"
-  end
-
-  return info
 end
 
 local TARGET_PARAM_CANDIDATES = {
@@ -1138,7 +1113,7 @@ function main()
   local centerPitch = getAverageSelectedPitch(selectedNotes)
 
   local result = SV:showCustomDialog({
-    title = "Pitch to Parameter",
+    title = "Pitch to Parameter (SV1)",
     message = "将选中音符的音高映射到目标参数。\nMap selected-note pitch into a target parameter.",
     buttons = "OkCancel",
     widgets = {
@@ -1524,7 +1499,7 @@ function getSidePanelSectionState()
   })
 
   return {
-    title = tr("音高转参数", "Pitch to Parameter"),
+    title = tr("音高转参数 (SV1)", "Pitch to Parameter (SV1)"),
     rows = rows,
   }
 end

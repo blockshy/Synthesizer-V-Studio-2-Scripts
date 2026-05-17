@@ -1,4 +1,4 @@
-# BPM Rescaler
+# BPM Rescaler (SV2)
 
 ## 功能
 
@@ -13,20 +13,20 @@
 ## 用法
 
 1. 在 Synthesizer V Studio 中选中要处理的轨道或音符组。
-2. SV2.1.2+：打开 Scripts 侧边栏中的 `BPM Rescaler` 面板；SV1/旧版本：从脚本菜单运行 `BPM Rescaler`，在弹窗中填写参数。
+2. 在 SV2.1.2+ 中打开 Scripts 侧边栏的 `BPM Rescaler (SV2)` 面板。
 3. 点击 `Detect BPM` 读取当前引用位置的 BPM。
 4. 确认“Current BPM”，并输入 MIDI/轨道导入前的“Original BPM”。
 5. 选择缩放锚点：
    - “音符组内部 0 位置”：保持组内 0 位置不动。
    - “第一个音符起点”：保持第一个音符位置不动，适合保留组内前置空白。
 6. 按需勾选是否缩放参数曲线和 Studio 2 音高控制。
-7. SV2 面板中点击 `Run` 执行；SV1 弹窗中点击 `OK` 执行。
+7. 点击 `Run` 执行。
 
 ## 注意事项
 
 - 本脚本执行的是单一比例缩放，不是完整 tempo map 转换。如果工程中有多个 BPM 标记，脚本会提示风险。
-- Synthesizer V Studio 2.1.2+ 会以侧边栏脚本运行；SV1/旧版本会以传统 `main()` 弹窗脚本运行。
-- SV1 兼容模式可缩放音符和参数曲线，但会自动跳过 Studio 2 音高控制对象。
+- 本目录是 SV2.1.2+ 专用侧边栏脚本，固定声明 `type = "SidePanelSection"` 和 `minEditorVersion = 131330`。
+- SV1/旧版本请使用 `BlockShy/BPM_Rescaler_SV1/BPM_Rescaler_SV1.lua`。
 - 面板标题和界面文本可通过“语言 / Language”切换中文或英文，默认中文；宿主侧边栏脚本列表名称来自静态 metadata，不能随面板开关实时切换。
 - 面板默认显示完整控制项；“功能与用法”说明默认隐藏，可通过“显示功能与用法”展开。
 - 当前实现修改的是当前音符组的目标对象。如果该目标被多个引用复用，其他引用也会一起变化。

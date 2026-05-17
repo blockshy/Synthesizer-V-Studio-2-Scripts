@@ -1,36 +1,14 @@
 local SIDE_PANEL_MIN_VERSION = 131330
 
-local function getHostVersionNumber()
-  local ok, hostInfo = pcall(function()
-    return SV:getHostInfo()
-  end)
-
-  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
-    return hostInfo.hostVersionNumber
-  end
-
-  return 0
-end
-
-local function isSidePanelHost()
-  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
-end
-
 function getClientInfo()
-  local info = {
-    name = "BPM Rescaler",
+  return {
+    name = "BPM Rescaler (SV2)",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 12,
-    minEditorVersion = 0,
+    versionNumber = 13,
+    minEditorVersion = SIDE_PANEL_MIN_VERSION,
+    type = "SidePanelSection",
   }
-
-  if isSidePanelHost() then
-    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
-    info.type = "SidePanelSection"
-  end
-
-  return info
 end
 
 local PARAM_TYPES = {
@@ -674,7 +652,7 @@ function main()
   local originalDefault = currentDefault / 2
 
   local result = SV:showCustomDialog({
-    title = "BPM Rescaler",
+    title = "BPM Rescaler (SV2)",
     message = "按 BPM 比例重缩放当前音符组目标。\nRescale the current note group target by BPM ratio.",
     buttons = "OkCancel",
     widgets = {
@@ -917,7 +895,7 @@ function getSidePanelSectionState()
   })
 
   return {
-    title = tr("BPM 重缩放", "BPM Rescaler"),
+    title = tr("BPM 重缩放 (SV2)", "BPM Rescaler (SV2)"),
     rows = rows,
   }
 end

@@ -1,36 +1,11 @@
-local SIDE_PANEL_MIN_VERSION = 131330
-
-local function getHostVersionNumber()
-  local ok, hostInfo = pcall(function()
-    return SV:getHostInfo()
-  end)
-
-  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
-    return hostInfo.hostVersionNumber
-  end
-
-  return 0
-end
-
-local function isSidePanelHost()
-  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
-end
-
 function getClientInfo()
-  local info = {
-    name = "Flatten Pitch Curve",
+  return {
+    name = "Flatten Pitch Curve (SV1)",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 8,
+    versionNumber = 9,
     minEditorVersion = 0,
   }
-
-  if isSidePanelHost() then
-    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
-    info.type = "SidePanelSection"
-  end
-
-  return info
 end
 
 local SCOPE_NOTES = "notes"
@@ -1033,7 +1008,7 @@ function main()
   local selectedNotes = getSortedSelectedNotes(selection)
 
   local result = SV:showCustomDialog({
-    title = "Flatten Pitch Curve",
+    title = "Flatten Pitch Curve (SV1)",
     message = "SV1 兼容模式只清理 pitchDelta，不能写入 Studio 2 Pitch Control Curve。\n"
       .. "SV1 compatibility mode cleans pitchDelta only and cannot write Studio 2 Pitch Control Curves.",
     buttons = "OkCancel",
@@ -1269,7 +1244,7 @@ function getSidePanelSectionState()
   })
 
   return {
-    title = tr("音高曲线抹平", "Flatten Pitch Curve"),
+    title = tr("音高曲线抹平 (SV1)", "Flatten Pitch Curve (SV1)"),
     rows = rows,
   }
 end

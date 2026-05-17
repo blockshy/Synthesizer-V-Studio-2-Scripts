@@ -1,4 +1,4 @@
-# Crying Effect
+# Crying Effect (SV1)
 
 ## Purpose
 
@@ -23,7 +23,7 @@ It can write:
 ## Usage
 
 1. Select one or more notes in the piano roll.
-2. SV2.1.2+: open the `Crying Effect` panel in the Scripts side panel. SV1/older versions: run `Crying Effect` from the script menu and fill in the legacy dialog.
+2. Run `Crying Effect (SV1)` from the script menu and fill in the dialog.
 3. Choose a crying preset. `Natural cry (Recommended)` is ready to use as the default.
 4. Enable the modules to generate: vibrato envelope, breathiness, tension, and tail pitch drop.
 5. Set preset strength and write mode.
@@ -32,8 +32,7 @@ It can write:
    - Peak position
    - Release position
 7. Configure tension randomness, fixed random output, pitch drop start, pitch drop depth, and whether pitch drop should apply only to the last note of each selected range.
-8. Click `Refresh` if you want to update the selected-note count.
-9. In SV2, click `Run`; in the SV1 dialog, click `OK`.
+8. Click `OK`.
 
 ## Write Modes
 
@@ -44,10 +43,9 @@ It can write:
 ## Notes
 
 - Output values are clamped to the official automation range for each parameter.
-- Synthesizer V Studio 2.1.2+ runs this as a side-panel script; SV1/older versions run it through a legacy `main()` dialog.
-- SV1 compatibility mode keeps presets, strength, write mode, and the main parameter toggles; advanced envelope details use defaults.
-- The panel title and UI text can switch between Chinese and English and default to Chinese; the host sidebar script-list name comes from static metadata and cannot follow the in-panel switch in real time.
-- The panel shows the full controls by default; the purpose/usage text is hidden by default and can be opened with `Show purpose & usage`.
+- This directory is the SV1/older-host version. Its static metadata exposes the traditional `main()` dialog entry and does not declare a side-panel type.
+- For the SV2.1.2+ side-panel version, use `BlockShy/Crying_Effect_SV2/Crying_Effect_SV2.lua`.
+- The SV1 version keeps presets, strength, write mode, and the main parameter toggles; advanced envelope details use defaults.
 - Fixed random output is enabled by default, making repeated runs more reproducible.
 - Presets override the advanced envelope and drop values; the advanced sliders are mainly for the `Custom` preset.
 - Pitch gestures are added relative to the current `pitchDelta` curve instead of forcing it back to zero.

@@ -1,4 +1,4 @@
-# Flatten Pitch Curve
+# Flatten Pitch Curve (SV2)
 
 ## Features
 
@@ -15,18 +15,18 @@ It can process:
 ## Usage
 
 1. Select notes in the piano roll, or select note groups in the arrangement.
-2. SV2.1.2+: open the `Flatten Pitch Curve` panel in the Scripts side panel. SV1/older versions: run `Flatten Pitch Curve` from the script menu and fill in the legacy dialog.
+2. In SV2.1.2+, open the `Flatten Pitch Curve (SV2)` panel in the Scripts side panel.
 3. Choose the processing scope: selected notes, selected note groups, or both.
 4. Keep `Draw horizontal Studio 2 Pitch Control Curve` enabled.
 5. Choose whether to also reset the `pitchDelta` curve.
 6. Choose whether to first remove existing Studio 2 pitch controls in the range.
-7. In SV2, click `Run`; in the SV1 dialog, click `OK`.
+7. Click `Run`.
 
 ## Notes
 
 - The script does not change note pitch, lyrics, duration, or position.
-- Synthesizer V Studio 2.1.2+ runs this as a side-panel script; SV1/older versions run it through a legacy `main()` dialog.
-- SV1 compatibility mode can only clean/reset `pitchDelta`; it cannot write Studio 2 Pitch Control Curves, so flattening is a fallback.
+- This directory is the SV2.1.2+ side-panel version. It statically declares `type = "SidePanelSection"` and `minEditorVersion = 131330`.
+- For SV1/older hosts, use `BlockShy/Flatten_Pitch_Curve_SV1/Flatten_Pitch_Curve_SV1.lua`.
 - The panel title and UI text can switch between Chinese and English and default to Chinese; the host sidebar script-list name comes from static metadata and cannot follow the in-panel switch in real time.
 - The panel shows the full controls by default; the purpose/usage text is hidden by default and can be opened with `Show purpose & usage`.
 - Resetting only `pitchDelta` is not enough to flatten SV2's generated pitch; the default behavior also writes horizontal Pitch Control Curves.

@@ -1,36 +1,11 @@
-local SIDE_PANEL_MIN_VERSION = 131330
-
-local function getHostVersionNumber()
-  local ok, hostInfo = pcall(function()
-    return SV:getHostInfo()
-  end)
-
-  if ok and type(hostInfo) == "table" and type(hostInfo.hostVersionNumber) == "number" then
-    return hostInfo.hostVersionNumber
-  end
-
-  return 0
-end
-
-local function isSidePanelHost()
-  return getHostVersionNumber() >= SIDE_PANEL_MIN_VERSION
-end
-
 function getClientInfo()
-  local info = {
-    name = "Crying Effect",
+  return {
+    name = "Crying Effect (SV1)",
     category = "BlockShy",
     author = "BlockShy",
-    versionNumber = 12,
+    versionNumber = 13,
     minEditorVersion = 0,
   }
-
-  if isSidePanelHost() then
-    info.minEditorVersion = SIDE_PANEL_MIN_VERSION
-    info.type = "SidePanelSection"
-  end
-
-  return info
 end
 
 local WRITE_OVERWRITE_RANGES = 0
@@ -1049,7 +1024,7 @@ end
 
 function main()
   local result = SV:showCustomDialog({
-    title = "Crying Effect",
+    title = "Crying Effect (SV1)",
     message = "为选中音符生成哭腔表现参数。\nGenerate crying-style expression parameters for selected notes.",
     buttons = "OkCancel",
     widgets = {
@@ -1384,7 +1359,7 @@ function getSidePanelSectionState()
   })
 
   return {
-    title = tr("哭腔效果", "Crying Effect"),
+    title = tr("哭腔效果 (SV1)", "Crying Effect (SV1)"),
     rows = rows,
   }
 end
